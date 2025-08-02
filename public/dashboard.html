@@ -64,6 +64,18 @@
             padding: 0 2rem;
         }
 
+        .debug-info {
+            background: rgba(0, 0, 0, 0.8);
+            color: #00ff00;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            font-family: monospace;
+            font-size: 0.9rem;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
         .dashboard-grid {
             display: grid;
             grid-template-columns: 2fr 1fr 1fr;
@@ -110,7 +122,7 @@
             background: #f8f9fa;
             font-weight: 600;
             color: #2c3e50;
-            sticky: top;
+            position: sticky;
             top: 0;
         }
 
@@ -173,19 +185,6 @@
             padding: 2rem;
         }
 
-        .last-updated {
-            text-align: center;
-            color: #7f8c8d;
-            font-size: 0.9rem;
-            margin-top: 1rem;
-        }
-
-        @media (max-width: 1024px) {
-            .dashboard-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-
         .loading {
             text-align: center;
             color: #7f8c8d;
@@ -199,19 +198,45 @@
             border-radius: 8px;
             margin-bottom: 1rem;
         }
+
+        .debug-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #2c3e50;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            z-index: 1000;
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
+    <button class="debug-toggle" onclick="toggleDebug()">Toggle Debug</button>
+    
     <div class="header">
         <h1>📊 Call Analytics Dashboard</h1>
         <div class="status">
             <div class="status-dot" id="statusDot"></div>
             <span id="statusText">Connecting...</span>
-            <span id="lastUpdated" class="last-updated"></span>
+            <span id="lastUpdated"></span>
         </div>
     </div>
 
     <div class="container">
+        <!-- Debug Console -->
+        <div class="debug-info" id="debugConsole" style="display: none;">
+            <div id="debugLog">Debug Console - Click Toggle Debug to hide</div>
+        </div>
+
         <div class="dashboard-grid">
             <!-- Agent Talk Time Table -->
             <div class="card">
@@ -253,6 +278,21 @@
     </div>
 
     <script>
+        let debugMode = false;
+
+        function toggleDebug() {
+            debugMode = !debugMode;
+            document.getElementById('debugConsole').style.display = debugMode ? 'block' : 'none';
+        }
+
+        function debugLog(message) {
+            const debugElement = document.getElementById('debugLog');
+            const timestamp = new Date().toLocaleTimeString();
+            debugElement.innerHTML += `<br>[${timestamp}] ${message}`;
+            debugElement.scrollTop = debugElement.scrollHeight;
+            console.log(message);
+        }
+
         class Dashboard {
             constructor() {
                 this.socket = null;
@@ -262,6 +302,7 @@
             }
 
             init() {
+                debugLog('🚀 Initializing dashboard...');
                 this.connectWebSocket();
                 this.setupUI();
                 this.startIdleTimeUpdater();
@@ -269,33 +310,34 @@
 
             connectWebSocket() {
                 try {
+                    debugLog('🔌 Attempting WebSocket connection...');
                     this.socket = io();
                     
                     this.socket.on('connect', () => {
                         this.isConnected = true;
                         this.updateConnectionStatus('Connected', true);
-                        console.log('✅ Connected to server');
+                        debugLog('✅ WebSocket connected successfully');
                     });
 
                     this.socket.on('disconnect', () => {
                         this.isConnected = false;
                         this.updateConnectionStatus('Disconnected', false);
-                        console.log('❌ Disconnected from server');
+                        debugLog('❌ WebSocket disconnected');
                     });
 
                     this.socket.on('dashboard_update', (data) => {
-                        console.log('📊 Dashboard update received:', data);
+                        debugLog(`📊 Dashboard update received: ${JSON.stringify(data, null, 2)}`);
                         this.lastData = data;
                         this.updateDashboard(data);
                     });
 
                     this.socket.on('connect_error', (error) => {
-                        console.error('❌ Connection error:', error);
+                        debugLog(`❌ WebSocket connection error: ${error}`);
                         this.updateConnectionStatus('Connection Error', false);
                     });
 
                 } catch (error) {
-                    console.error('❌ Failed to initialize WebSocket:', error);
+                    debugLog(`❌ Failed to initialize WebSocket: ${error}`);
                     this.updateConnectionStatus('Failed to Connect', false);
                 }
             }
@@ -306,9 +348,11 @@
                 
                 statusDot.className = `status-dot ${connected ? 'connected' : ''}`;
                 statusText.textContent = status;
+                debugLog(`🔗 Connection status: ${status}`);
             }
 
             updateDashboard(data) {
+                debugLog(`📊 Updating dashboard with data: ${Object.keys(data)}`);
                 this.updateTalkTimeTable(data.agentsTalkTime || []);
                 this.updateOnCallList(data.agentsOnCall || []);
                 this.updateIdleTimeList(data.agentsIdleTime || []);
@@ -317,6 +361,7 @@
 
             updateTalkTimeTable(agents) {
                 const tableBody = document.getElementById('talkTimeTable');
+                debugLog(`📊 Updating talk time table with ${agents.length} agents`);
                 
                 if (agents.length === 0) {
                     tableBody.innerHTML = '<tr><td colspan="3" class="no-data">No agent data available</td></tr>';
@@ -339,6 +384,7 @@
 
             updateOnCallList(agentsOnCall) {
                 const container = document.getElementById('onCallList');
+                debugLog(`📞 Updating on-call list with ${agentsOnCall.length} agents`);
                 
                 if (agentsOnCall.length === 0) {
                     container.innerHTML = '<div class="no-data">📴 No agents currently on call</div>';
@@ -363,6 +409,7 @@
 
             updateIdleTimeList(agentsIdle) {
                 const container = document.getElementById('idleTimeList');
+                debugLog(`⏰ Updating idle list with ${agentsIdle.length} agents`);
                 
                 if (agentsIdle.length === 0) {
                     container.innerHTML = '<div class="no-data">📞 All agents recently active</div>';
@@ -415,10 +462,8 @@
             }
 
             startIdleTimeUpdater() {
-                // Update idle times every 30 seconds
                 setInterval(() => {
                     if (this.lastData && this.lastData.agentsIdleTime) {
-                        // Recalculate idle times
                         const updatedAgents = this.lastData.agentsIdleTime.map(agent => {
                             if (agent.lastCallEnd) {
                                 const lastCallEnd = new Date(agent.lastCallEnd);
@@ -431,21 +476,37 @@
                         
                         this.updateIdleTimeList(updatedAgents);
                     }
-                }, 30000); // 30 seconds
+                }, 30000);
             }
 
             setupUI() {
-                // Load initial data from API
+                debugLog('🔧 Loading initial data from API...');
+                
                 fetch('/api/dashboard/live')
-                    .then(response => response.json())
+                    .then(response => {
+                        debugLog(`📡 API response status: ${response.status}`);
+                        return response.json();
+                    })
                     .then(result => {
+                        debugLog(`📡 API response: ${JSON.stringify(result, null, 2)}`);
+                        
                         if (result.success) {
                             this.lastData = result.data;
                             this.updateDashboard(result.data);
+                        } else {
+                            debugLog(`❌ API returned error: ${result.error || 'Unknown error'}`);
                         }
                     })
                     .catch(error => {
-                        console.error('❌ Error loading initial data:', error);
+                        debugLog(`❌ Error loading initial data: ${error}`);
+                        
+                        // Show error in UI
+                        document.getElementById('talkTimeTable').innerHTML = 
+                            `<tr><td colspan="3" class="error">Error loading data: ${error.message}</td></tr>`;
+                        document.getElementById('onCallList').innerHTML = 
+                            `<div class="error">Error loading data: ${error.message}</div>`;
+                        document.getElementById('idleTimeList').innerHTML = 
+                            `<div class="error">Error loading data: ${error.message}</div>`;
                     });
             }
         }
