@@ -62,21 +62,27 @@ class CallAnalyticsServer {
     // API routes
     this.app.use('/api', routes);
 
+    // Dashboard route - ADD THIS
+    this.app.get('/dashboard', (req, res) => {
+        res.sendFile('dashboard.html', { root: 'public' });
+    });
+
     // Root endpoint
     this.app.get('/', (req, res) => {
-      res.json({
-        name: 'Call Analytics Server',
-        version: '1.0.0',
-        status: 'running',
-        timestamp: new Date().toISOString(),
-        endpoints: {
-          health: '/api/health',
-          dashboard: '/api/dashboard/live',
-          agents: '/api/agents',
-          stats: '/api/stats',
-          agentHistory: '/api/agent/:agentCode/history?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD'
-        }
-      });
+        res.json({
+            name: 'Call Analytics Server',
+            version: '1.0.0',
+            status: 'running',
+            timestamp: new Date().toISOString(),
+            endpoints: {
+                dashboard: '/dashboard',
+                health: '/api/health',
+                dashboardData: '/api/dashboard/live',
+                agents: '/api/agents',
+                stats: '/api/stats',
+                agentHistory: '/api/agent/:agentCode/history?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD'
+            }
+        });
     });
 
     // Catch all other routes
