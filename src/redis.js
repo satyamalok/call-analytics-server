@@ -10,22 +10,18 @@ class RedisManager {
 
   async init() {
     try {
+      // Redis v4+ client configuration
       this.client = redis.createClient({
-        host: config.redis.host,
-        port: config.redis.port,
-        retry_strategy: (options) => {
-          if (options.error && options.error.code === 'ECONNREFUSED') {
-            console.log('❌ Redis server connection refused');
+        socket: {
+          host: config.redis.host,
+          port: config.redis.port,
+          reconnectStrategy: (retries) => {
+            if (retries > 10) {
+              console.log('❌ Redis retry attempts exhausted');
+              return new Error('Retry attempts exhausted');
+            }
+            return Math.min(retries * 100, 3000);
           }
-          if (options.total_retry_time > 1000 * 60 * 60) {
-            console.log('❌ Redis retry time exhausted');
-            return new Error('Retry time exhausted');
-          }
-          if (options.attempt > 10) {
-            console.log('❌ Redis retry attempts exhausted');
-            return undefined;
-          }
-          return Math.min(options.attempt * 100, 3000);
         }
       });
 
@@ -41,6 +37,11 @@ class RedisManager {
 
       this.client.on('end', () => {
         console.log('⚠️ Redis connection ended');
+        this.isConnected = false;
+      });
+
+      this.client.on('reconnecting', () => {
+        console.log('🔄 Redis reconnecting...');
         this.isConnected = false;
       });
 
