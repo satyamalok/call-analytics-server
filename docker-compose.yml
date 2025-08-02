@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: call-analytics-server
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - proxiable
+      - internal
+    volumes:
+      - ./logs:/app/logs
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: call-analytics-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: callanalytics
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: your_secure_password_here
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d callanalytics"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: call-analytics-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  proxiable:
+    external: true
+  internal:
+    driver: bridge

@@ -1,0 +1,29 @@
+{
+  "name": "call-analytics-server",
+  "version": "1.0.0",
+  "description": "Real-time call analytics dashboard server",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test-server": "nodemon src/test-server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["call-analytics", "real-time", "dashboard"],
+  "author": "Your Name",
+  "license": "ISC",
+  "dependencies": {
+    "express": "4.18.2",
+    "socket.io": "4.7.2",
+    "pg": "8.11.3",
+    "redis": "4.6.7",
+    "cors": "2.8.5",
+    "dotenv": "16.3.1",
+    "helmet": "7.0.0",
+    "morgan": "1.10.0",
+    "path-to-regexp": "0.1.7"
+  },
+  "devDependencies": {
+    "nodemon": "3.0.1"
+  }
+}

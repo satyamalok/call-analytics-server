@@ -1,0 +1,191 @@
+const { Pool } = require('pg');
+const config = require('../config/config');
+
+class Database {
+  constructor() {
+    this.pool = new Pool(config.database);
+    this.init();
+  }
+
+  async init() {
+    try {
+      // Test connection
+      const client = await this.pool.connect();
+      console.log('✅ PostgreSQL connected successfully');
+      client.release();
+      
+      // Create tables if they don't exist
+      await this.createTables();
+    } catch (error) {
+      console.error('❌ Database connection failed:', error.message);
+    }
+  }
+
+  async createTables() {
+    const createAgentsTable = `
+      CREATE TABLE IF NOT EXISTS agents (
+        agent_code VARCHAR(50) PRIMARY KEY,
+        agent_name VARCHAR(100) NOT NULL,
+        last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status VARCHAR(20) DEFAULT 'offline',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+
+    const createCallsTable = `
+      CREATE TABLE IF NOT EXISTS calls (
+        id SERIAL PRIMARY KEY,
+        agent_code VARCHAR(50) REFERENCES agents(agent_code),
+        phone_number VARCHAR(20),
+        contact_name VARCHAR(100),
+        call_type VARCHAR(20) NOT NULL,
+        talk_duration INTEGER DEFAULT 0,
+        total_duration INTEGER DEFAULT 0,
+        call_date DATE NOT NULL,
+        start_time TIME,
+        end_time TIME,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+
+    const createIndexes = `
+      CREATE INDEX IF NOT EXISTS idx_calls_agent_date ON calls(agent_code, call_date);
+      CREATE INDEX IF NOT EXISTS idx_calls_date ON calls(call_date);
+      CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
+    `;
+
+    try {
+      await this.pool.query(createAgentsTable);
+      await this.pool.query(createCallsTable);
+      await this.pool.query(createIndexes);
+      console.log('✅ Database tables created/verified');
+    } catch (error) {
+      console.error('❌ Error creating tables:', error.message);
+    }
+  }
+
+  // Agent methods
+  async upsertAgent(agentCode, agentName, status = 'online') {
+    const query = `
+      INSERT INTO agents (agent_code, agent_name, status, last_seen, updated_at)
+      VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT (agent_code) 
+      DO UPDATE SET 
+        agent_name = EXCLUDED.agent_name,
+        status = EXCLUDED.status,
+        last_seen = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
+      RETURNING *
+    `;
+    
+    try {
+      const result = await this.pool.query(query, [agentCode, agentName, status]);
+      return result.rows[0];
+    } catch (error) {
+      console.error('❌ Error upserting agent:', error.message);
+      throw error;
+    }
+  }
+
+  async updateAgentStatus(agentCode, status) {
+    const query = `
+      UPDATE agents 
+      SET status = $1, last_seen = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+      WHERE agent_code = $2
+      RETURNING *
+    `;
+    
+    try {
+      const result = await this.pool.query(query, [status, agentCode]);
+      return result.rows[0];
+    } catch (error) {
+      console.error('❌ Error updating agent status:', error.message);
+      throw error;
+    }
+  }
+
+  // Call methods
+  async insertCall(callData) {
+    const query = `
+      INSERT INTO calls (
+        agent_code, phone_number, contact_name, call_type,
+        talk_duration, total_duration, call_date, start_time, end_time
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING *
+    `;
+    
+    const values = [
+      callData.agentCode,
+      callData.phoneNumber,
+      callData.contactName || null,
+      callData.callType,
+      callData.talkDuration || 0,
+      callData.totalDuration || 0,
+      callData.callDate,
+      callData.startTime,
+      callData.endTime
+    ];
+    
+    try {
+      const result = await this.pool.query(query, values);
+      return result.rows[0];
+    } catch (error) {
+      console.error('❌ Error inserting call:', error.message);
+      throw error;
+    }
+  }
+
+  // Analytics methods
+  async getTodayTalkTime() {
+    const query = `
+      SELECT 
+        a.agent_code,
+        a.agent_name,
+        COALESCE(SUM(c.talk_duration), 0) as today_talk_time
+      FROM agents a
+      LEFT JOIN calls c ON a.agent_code = c.agent_code 
+        AND c.call_date = CURRENT_DATE
+      GROUP BY a.agent_code, a.agent_name
+      ORDER BY a.agent_code ASC
+    `;
+    
+    try {
+      const result = await this.pool.query(query);
+      return result.rows;
+    } catch (error) {
+      console.error('❌ Error getting today talk time:', error.message);
+      throw error;
+    }
+  }
+
+  async getAgentHistory(agentCode, startDate, endDate) {
+    const query = `
+      SELECT 
+        call_date,
+        SUM(talk_duration) as total_talk_time,
+        COUNT(*) as total_calls
+      FROM calls
+      WHERE agent_code = $1 
+        AND call_date >= $2 
+        AND call_date <= $3
+      GROUP BY call_date
+      ORDER BY call_date DESC
+    `;
+    
+    try {
+      const result = await this.pool.query(query, [agentCode, startDate, endDate]);
+      return result.rows;
+    } catch (error) {
+      console.error('❌ Error getting agent history:', error.message);
+      throw error;
+    }
+  }
+
+  async cleanup() {
+    await this.pool.end();
+  }
+}
+
+module.exports = new Database();
