@@ -16,10 +16,13 @@ class Dashboard {
       // Setup debug console
       this.setupDebugConsole();
       
+      // Wait for WebSocketService to be fully ready
+      await this.waitForWebSocketService();
+      
       // Initialize components
       this.initializeComponents();
       
-      // Setup global event listeners
+      // Setup global event listeners (now that WebSocketService is ready)
       this.setupEventListeners();
       
       // Connect to WebSocket
@@ -39,6 +42,39 @@ class Dashboard {
       NotificationService.instance.error(`Failed to initialize dashboard: ${error.message}`);
       this.showInitializationError(error);
     }
+  }
+
+  // NEW: Wait for WebSocketService to be fully ready
+  async waitForWebSocketService() {
+    return new Promise((resolve, reject) => {
+      let attempts = 0;
+      const maxAttempts = 10;
+      
+      const checkService = () => {
+        attempts++;
+        
+        // Check if WebSocketService exists and has the methods we need
+        if (window.WebSocketService && 
+            typeof window.WebSocketService.on === 'function' &&
+            typeof window.WebSocketService.connect === 'function' &&
+            window.WebSocketService.eventEmitter) {
+          
+          Helpers.debugLog('✅ WebSocketService is ready');
+          resolve();
+          return;
+        }
+        
+        if (attempts >= maxAttempts) {
+          reject(new Error('WebSocketService failed to initialize after maximum attempts'));
+          return;
+        }
+        
+        Helpers.debugLog(`⏳ Waiting for WebSocketService... (${attempts}/${maxAttempts})`);
+        setTimeout(checkService, 100); // Check every 100ms
+      };
+      
+      checkService();
+    });
   }
 
   setupDebugConsole() {
@@ -65,6 +101,14 @@ class Dashboard {
 
   initializeComponents() {
     try {
+      // Verify all required DOM elements exist
+      const requiredElements = ['talkTimeCard', 'onCallCard', 'idleTimeCard', 'statsCard'];
+      const missingElements = requiredElements.filter(id => !document.getElementById(id));
+      
+      if (missingElements.length > 0) {
+        throw new Error(`Missing required DOM elements: ${missingElements.join(', ')}`);
+      }
+      
       // Initialize all dashboard components
       this.components.talkTime = new TalkTimeCard();
       this.components.onCall = new OnCallCard();
@@ -85,55 +129,60 @@ class Dashboard {
   }
 
   setupEventListeners() {
-  // Ensure WebSocketService is available
-  if (!window.WebSocketService || typeof window.WebSocketService.on !== 'function') {
-    throw new Error('WebSocketService not properly initialized');
-  }
-
-  // WebSocket connection status
-  WebSocketService.on('connection_status', (status) => {
-    this.updateConnectionStatus(status);
-  });
-
-    // Dashboard data updates
-    WebSocketService.on('dashboard_update', (data) => {
-      this.handleDashboardUpdate(data);
-    });
-
-    // Call timer updates
-    WebSocketService.on('call_timer_update', (data) => {
-      this.components.onCall.updateCallTimer(data);
-    });
-
-    // Server errors
-    WebSocketService.on('server_error', (error) => {
-      NotificationService.instance.error(`Server error: ${error.message || error}`);
-    });
-
-    // Window events
-    window.addEventListener('beforeunload', () => {
-      this.cleanup();
-    });
-
-    // Visibility change (tab switching)
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
-        this.onTabVisible();
-      } else {
-        this.onTabHidden();
+    try {
+      // Ensure WebSocketService is available
+      if (!window.WebSocketService || typeof window.WebSocketService.on !== 'function') {
+        throw new Error('WebSocketService not properly initialized');
       }
-    });
 
-    // Online/offline events
-    window.addEventListener('online', () => {
-      this.onNetworkOnline();
-    });
+      // WebSocket connection status
+      WebSocketService.on('connection_status', (status) => {
+        this.updateConnectionStatus(status);
+      });
 
-    window.addEventListener('offline', () => {
-      this.onNetworkOffline();
-    });
+      // Dashboard data updates
+      WebSocketService.on('dashboard_update', (data) => {
+        this.handleDashboardUpdate(data);
+      });
 
-    Helpers.debugLog('✅ Event listeners setup complete');
+      // Call timer updates
+      WebSocketService.on('call_timer_update', (data) => {
+        this.components.onCall.updateCallTimer(data);
+      });
+
+      // Server errors
+      WebSocketService.on('server_error', (error) => {
+        NotificationService.instance.error(`Server error: ${error.message || error}`);
+      });
+
+      // Window events
+      window.addEventListener('beforeunload', () => {
+        this.cleanup();
+      });
+
+      // Visibility change (tab switching)
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          this.onTabVisible();
+        } else {
+          this.onTabHidden();
+        }
+      });
+
+      // Online/offline events
+      window.addEventListener('online', () => {
+        this.onNetworkOnline();
+      });
+
+      window.addEventListener('offline', () => {
+        this.onNetworkOffline();
+      });
+
+      Helpers.debugLog('✅ Event listeners setup complete');
+      
+    } catch (error) {
+      throw new Error(`Event listener setup failed: ${error.message}`);
+    }
   }
 
   connectWebSocket() {
