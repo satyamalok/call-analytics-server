@@ -4,8 +4,10 @@ const redis = require('./redis');
 class WebSocketManager {
   constructor(io) {
     this.io = io;
+    this.recentReminders = new Set(); // Track sent reminders to prevent duplicates
     this.connectedAgents = new Map(); // agentCode -> socketId
     this.init();
+    this.startReminderSystem(); // ADD THIS LINE
   }
 
   init() {
@@ -37,6 +39,12 @@ class WebSocketManager {
       socket.on('ping', () => {
         socket.emit('pong');
       });
+
+      socket.on('reminder_acknowledged', async (data) => {
+  console.log(`✅ Reminder acknowledgment received:`, JSON.stringify(data, null, 2));
+  await this.handleReminderAcknowledgment(socket, data);
+});
+
     });
   }
 
@@ -277,6 +285,136 @@ class WebSocketManager {
     }
   }
 
+  // Reminder system methods
+async checkAndSendReminders() {
+  try {
+    // Get all enabled agent reminder settings
+    const enabledReminders = await database.getEnabledAgentReminders();
+    
+    if (enabledReminders.length === 0) {
+      return; // No agents have reminders enabled
+    }
+
+    // Get current idle agents from Redis
+    const agentsStatus = await redis.getAllAgentsStatus();
+    const activeCalls = await redis.getAllActiveCalls();
+    
+    const now = new Date();
+
+    for (const reminder of enabledReminders) {
+      const { agent_code, reminder_interval_minutes, agent_name } = reminder;
+      
+      // Skip if agent is currently on call
+      if (activeCalls[agent_code]) {
+        continue;
+      }
+
+      // Skip if agent is not online
+      const agentStatus = agentsStatus[agent_code];
+      if (!agentStatus || agentStatus.status !== 'online') {
+        continue;
+      }
+
+      // Check if agent has been idle long enough
+      if (agentStatus.lastCallEnd) {
+        const lastCallEnd = new Date(agentStatus.lastCallEnd);
+        const minutesIdle = Math.floor((now - lastCallEnd) / (1000 * 60));
+        
+        // Check if we should send a reminder (at multiples of interval)
+        if (this.shouldSendReminder(agent_code, minutesIdle, reminder_interval_minutes)) {
+          await this.sendReminderToAgent(agent_code, agent_name, minutesIdle, reminder_interval_minutes);
+        }
+      }
+    }
+
+  } catch (error) {
+    console.error('❌ Error checking reminders:', error.message);
+  }
+}
+
+shouldSendReminder(agentCode, minutesIdle, intervalMinutes) {
+  // Only send reminder at exact multiples of the interval
+  if (minutesIdle < intervalMinutes || minutesIdle % intervalMinutes !== 0) {
+    return false;
+  }
+
+  // Check if we already sent a reminder for this exact minute
+  const lastReminderKey = `${agentCode}-${minutesIdle}`;
+  if (this.recentReminders && this.recentReminders.has(lastReminderKey)) {
+    return false;
+  }
+
+  // Mark this reminder as sent (prevent duplicates)
+  if (!this.recentReminders) {
+    this.recentReminders = new Set();
+  }
+  this.recentReminders.add(lastReminderKey);
+
+  // Clean up old entries (keep only last 100)
+  if (this.recentReminders.size > 100) {
+    const oldestEntries = Array.from(this.recentReminders).slice(0, 20);
+    oldestEntries.forEach(entry => this.recentReminders.delete(entry));
+  }
+
+  return true;
+}
+
+async sendReminderToAgent(agentCode, agentName, minutesIdle, intervalMinutes) {
+  try {
+    const socketId = this.connectedAgents.get(agentCode);
+    
+    if (socketId) {
+      // Send to connected agent via WebSocket
+      const reminderData = {
+        action: 'show_reminder',
+        message: `It's been ${minutesIdle} minutes since your last call. Time to make another call!`,
+        idleTime: `${minutesIdle} minutes`,
+        intervalMinutes: intervalMinutes,
+        agentCode: agentCode,
+        agentName: agentName,
+        timestamp: new Date().toISOString()
+      };
+
+      this.io.to(socketId).emit('reminder_trigger', reminderData);
+      
+      console.log(`📱 Reminder sent to ${agentCode} (${agentName}) - ${minutesIdle} minutes idle`);
+      
+      // Store reminder in Redis for tracking
+      await redis.setLastReminderSent(agentCode, new Date().toISOString());
+      
+      return true;
+    } else {
+      console.log(`⚠️ Agent ${agentCode} not connected, reminder not sent`);
+      return false;
+    }
+
+  } catch (error) {
+    console.error(`❌ Error sending reminder to ${agentCode}:`, error.message);
+    return false;
+  }
+}
+
+// Handle reminder acknowledgments from Android app
+async handleReminderAcknowledgment(socket, data) {
+  try {
+    const { agentCode, timestamp, action } = data;
+    
+    console.log(`✅ Reminder acknowledged by ${agentCode} at ${timestamp}`);
+    
+    // Log acknowledgment (could store in database for analytics later)
+    // For now, just log it
+    
+    // Optional: Send confirmation back to app
+    socket.emit('reminder_ack_received', {
+      status: 'acknowledged',
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error handling reminder acknowledgment:', error.message);
+  }
+}
+
   formatDuration(seconds) {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -290,6 +428,23 @@ class WebSocketManager {
       return `${remainingSeconds}s`;
     }
   }
+
+  startReminderSystem() {
+  // Check for reminders every minute
+  this.reminderInterval = setInterval(async () => {
+    await this.checkAndSendReminders();
+  }, 60000); // 60 seconds
+
+  console.log('✅ Reminder system started - checking every minute');
+}
+
+// Update cleanup method to clear interval
+cleanup() {
+  if (this.reminderInterval) {
+    clearInterval(this.reminderInterval);
+    console.log('✅ Reminder system stopped');
+  }
+}
 
   // Method to get connected agents count
   getConnectedAgentsCount() {
