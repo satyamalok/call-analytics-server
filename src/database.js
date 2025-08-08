@@ -183,6 +183,84 @@ class Database {
     }
   }
 
+  // Reminder settings methods
+async upsertAgentReminderSettings(agentCode, intervalMinutes, enabled) {
+  const query = `
+    INSERT INTO agent_reminder_settings (agent_code, reminder_interval_minutes, reminders_enabled, updated_at)
+    VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+    ON CONFLICT (agent_code) 
+    DO UPDATE SET 
+      reminder_interval_minutes = EXCLUDED.reminder_interval_minutes,
+      reminders_enabled = EXCLUDED.reminders_enabled,
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING *
+  `;
+  
+  try {
+    const result = await this.pool.query(query, [agentCode, intervalMinutes, enabled]);
+    return result.rows[0];
+  } catch (error) {
+    console.error('❌ Error upserting agent reminder settings:', error.message);
+    throw error;
+  }
+}
+
+async getAgentReminderSettings(agentCode) {
+  const query = `
+    SELECT * FROM agent_reminder_settings 
+    WHERE agent_code = $1
+  `;
+  
+  try {
+    const result = await this.pool.query(query, [agentCode]);
+    return result.rows[0];
+  } catch (error) {
+    console.error('❌ Error getting agent reminder settings:', error.message);
+    throw error;
+  }
+}
+
+async getAllAgentReminderSettings() {
+  const query = `
+    SELECT 
+      ars.*,
+      a.agent_name,
+      a.status as agent_status
+    FROM agent_reminder_settings ars
+    LEFT JOIN agents a ON ars.agent_code = a.agent_code
+    ORDER BY ars.agent_code ASC
+  `;
+  
+  try {
+    const result = await this.pool.query(query);
+    return result.rows;
+  } catch (error) {
+    console.error('❌ Error getting all agent reminder settings:', error.message);
+    throw error;
+  }
+}
+
+async getEnabledAgentReminders() {
+  const query = `
+    SELECT 
+      ars.*,
+      a.agent_name,
+      a.status as agent_status
+    FROM agent_reminder_settings ars
+    LEFT JOIN agents a ON ars.agent_code = a.agent_code
+    WHERE ars.reminders_enabled = true
+    ORDER BY ars.agent_code ASC
+  `;
+  
+  try {
+    const result = await this.pool.query(query);
+    return result.rows;
+  } catch (error) {
+    console.error('❌ Error getting enabled agent reminders:', error.message);
+    throw error;
+  }
+}
+
   async cleanup() {
     await this.pool.end();
   }

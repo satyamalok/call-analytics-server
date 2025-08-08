@@ -216,4 +216,134 @@ function formatDuration(seconds) {
   }
 }
 
+// Agent reminder settings routes
+router.get('/reminder-settings', async (req, res) => {
+  try {
+    const settings = await database.getAllAgentReminderSettings();
+    
+    res.json({
+      success: true,
+      data: settings
+    });
+
+  } catch (error) {
+    console.error('❌ Error getting reminder settings:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+router.get('/reminder-settings/:agentCode', async (req, res) => {
+  try {
+    const { agentCode } = req.params;
+    const settings = await database.getAgentReminderSettings(agentCode);
+    
+    if (!settings) {
+      return res.status(404).json({
+        success: false,
+        error: 'Agent reminder settings not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: settings
+    });
+
+  } catch (error) {
+    console.error('❌ Error getting agent reminder settings:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+router.post('/reminder-settings/:agentCode', async (req, res) => {
+  try {
+    const { agentCode } = req.params;
+    const { reminder_interval_minutes, reminders_enabled } = req.body;
+
+    // Validation
+    if (!reminder_interval_minutes || reminder_interval_minutes < 1) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid reminder interval. Must be at least 1 minute.'
+      });
+    }
+
+    if (typeof reminders_enabled !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        error: 'reminders_enabled must be a boolean value'
+      });
+    }
+
+    const settings = await database.upsertAgentReminderSettings(
+      agentCode,
+      parseInt(reminder_interval_minutes),
+      reminders_enabled
+    );
+
+    res.json({
+      success: true,
+      data: settings,
+      message: `Reminder settings updated for ${agentCode}`
+    });
+
+  } catch (error) {
+    console.error('❌ Error updating reminder settings:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Bulk update reminder settings
+router.post('/reminder-settings-bulk', async (req, res) => {
+  try {
+    const { settings } = req.body;
+
+    if (!Array.isArray(settings)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Settings must be an array'
+      });
+    }
+
+    const results = [];
+
+    for (const setting of settings) {
+      const { agentCode, reminder_interval_minutes, reminders_enabled } = setting;
+      
+      try {
+        const result = await database.upsertAgentReminderSettings(
+          agentCode,
+          parseInt(reminder_interval_minutes),
+          reminders_enabled
+        );
+        results.push({ success: true, agentCode, data: result });
+      } catch (error) {
+        results.push({ success: false, agentCode, error: error.message });
+      }
+    }
+
+    res.json({
+      success: true,
+      data: results,
+      message: `Bulk update completed for ${results.length} agents`
+    });
+
+  } catch (error) {
+    console.error('❌ Error bulk updating reminder settings:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

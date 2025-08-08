@@ -82,3 +82,42 @@ DO $$
 BEGIN
     RAISE NOTICE 'Call Analytics database initialized successfully!';
 END $$;
+
+-- Agent reminder settings table
+CREATE TABLE IF NOT EXISTS agent_reminder_settings (
+    agent_code VARCHAR(50) PRIMARY KEY REFERENCES agents(agent_code) ON DELETE CASCADE,
+    reminder_interval_minutes INTEGER DEFAULT 5 CHECK (reminder_interval_minutes > 0),
+    reminders_enabled BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert default reminder settings for existing agents
+INSERT INTO agent_reminder_settings (agent_code, reminder_interval_minutes, reminders_enabled)
+SELECT agent_code, 5, true 
+FROM agents 
+ON CONFLICT (agent_code) DO NOTHING;
+
+-- Create trigger to auto-insert reminder settings for new agents
+CREATE OR REPLACE FUNCTION create_default_reminder_settings()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO agent_reminder_settings (agent_code, reminder_interval_minutes, reminders_enabled)
+    VALUES (NEW.agent_code, 5, true)
+    ON CONFLICT (agent_code) DO NOTHING;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+DROP TRIGGER IF EXISTS auto_create_reminder_settings ON agents;
+CREATE TRIGGER auto_create_reminder_settings
+    AFTER INSERT ON agents
+    FOR EACH ROW
+    EXECUTE FUNCTION create_default_reminder_settings();
+
+-- Update trigger for reminder settings
+DROP TRIGGER IF EXISTS update_reminder_settings_updated_at ON agent_reminder_settings;
+CREATE TRIGGER update_reminder_settings_updated_at
+    BEFORE UPDATE ON agent_reminder_settings
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();

@@ -206,6 +206,70 @@ class RedisManager {
     }
   }
 
+  // Reminder tracking methods
+async setLastReminderSent(agentCode, timestamp) {
+  if (!this.isConnected) return false;
+
+  const key = `reminder:${agentCode}`;
+  try {
+    await this.client.hSet(key, {
+      lastReminderSent: timestamp,
+      lastUpdate: new Date().toISOString()
+    });
+    await this.client.expire(key, 86400); // Expire after 24 hours
+    return true;
+  } catch (error) {
+    console.error('❌ Error setting last reminder sent:', error.message);
+    return false;
+  }
+}
+
+async getLastReminderSent(agentCode) {
+  if (!this.isConnected) return null;
+
+  try {
+    const data = await this.client.hGetAll(`reminder:${agentCode}`);
+    return Object.keys(data).length > 0 ? data : null;
+  } catch (error) {
+    console.error('❌ Error getting last reminder sent:', error.message);
+    return null;
+  }
+}
+
+async clearReminderData(agentCode) {
+  if (!this.isConnected) return false;
+
+  try {
+    await this.client.del(`reminder:${agentCode}`);
+    return true;
+  } catch (error) {
+    console.error('❌ Error clearing reminder data:', error.message);
+    return false;
+  }
+}
+
+async getAllReminderData() {
+  if (!this.isConnected) return {};
+
+  try {
+    const keys = await this.client.keys('reminder:*');
+    const reminderData = {};
+
+    for (const key of keys) {
+      const agentCode = key.replace('reminder:', '');
+      const data = await this.client.hGetAll(key);
+      if (Object.keys(data).length > 0) {
+        reminderData[agentCode] = data;
+      }
+    }
+
+    return reminderData;
+  } catch (error) {
+    console.error('❌ Error getting all reminder data:', error.message);
+    return {};
+  }
+}
+
   // Utility methods
   async cleanup() {
     if (this.client) {
