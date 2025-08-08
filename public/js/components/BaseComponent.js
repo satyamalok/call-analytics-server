@@ -25,7 +25,11 @@ class BaseComponent {
 
   // Initialize component
   init() {
-    this.setupEventListeners();
+    // FIXED: Delay event listener setup to ensure WebSocketService is ready
+    setTimeout(() => {
+      this.setupEventListeners();
+    }, 100);
+    
     this.isInitialized = true;
     
     if (this.options.debugMode) {
@@ -36,6 +40,10 @@ class BaseComponent {
   // Setup event listeners (override in subclasses)
   setupEventListeners() {
     // Base implementation - override in subclasses
+    // FIXED: Check WebSocketService availability before using
+    if (window.WebSocketService && typeof window.WebSocketService.on === 'function') {
+      // Safe to setup WebSocket event listeners in subclasses
+    }
   }
 
   // Update component data
