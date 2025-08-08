@@ -136,8 +136,16 @@
     <script src="js/utils/helpers.js"></script>
     <script src="js/services/NotificationService.js"></script>
     <script src="js/services/APIService.js"></script>
+    
     <script src="js/services/WebSocketService.js"></script>
-    <script src="js/components/BaseComponent.js"></script>
+<script>
+  // Ensure WebSocketService is ready before loading components
+  if (!window.WebSocketService) {
+    console.error('WebSocketService failed to load');
+  }
+</script>
+<script src="js/components/BaseComponent.js"></script>
+
     <script src="js/components/TalkTimeCard.js"></script>
     <script src="js/components/OnCallCard.js"></script>
     <script src="js/components/IdleTimeCard.js"></script>
