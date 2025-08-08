@@ -22,8 +22,9 @@ class WebSocketManager {
       });
 
       socket.on('call_started', async (data) => {
-        await this.handleCallStarted(socket, data);
-      });
+  console.log(`📞 Raw call_started data received:`, JSON.stringify(data, null, 2));
+  await this.handleCallStarted(socket, data);
+});
 
       socket.on('call_ended', async (data) => {
         await this.handleCallEnded(socket, data);
@@ -101,39 +102,40 @@ class WebSocketManager {
   }
 
   async handleCallStarted(socket, data) {
-    try {
-      const { agentCode, agentName, phoneNumber, callType } = data;
-      
-      if (!agentCode) {
-        socket.emit('error', { message: 'Agent code required' });
-        return;
-      }
-
-      console.log(`📞 Call started: ${agentCode} -> ${phoneNumber} (${callType})`);
-
-      // Update database agent status
-      await database.updateAgentStatus(agentCode, 'on_call');
-
-      // Update Redis with call data
-      await redis.setCallStart(agentCode, {
-        phoneNumber,
-        callType,
-        agentName
-      });
-
-      await redis.setAgentStatus(agentCode, 'on_call', {
-        agentName,
-        currentCall: phoneNumber
-      });
-
-      // Broadcast updated dashboard data
-      await this.broadcastDashboardUpdate();
-
-    } catch (error) {
-      console.error('❌ Error handling call started:', error.message);
-      socket.emit('error', { message: 'Failed to record call start' });
+  try {
+    const { agentCode, agentName, phoneNumber, callType } = data;
+    
+    if (!agentCode) {
+      socket.emit('error', { message: 'Agent code required' });
+      return;
     }
+
+    console.log(`📞 Call started: ${agentCode} -> ${phoneNumber} (${callType})`);
+
+    // Update database agent status
+    await database.updateAgentStatus(agentCode, 'on_call');
+
+    // Update Redis with call data - FIXED: Better call data structure
+    await redis.setCallStart(agentCode, {
+      phoneNumber: phoneNumber || 'Unknown',
+      callType: callType || 'unknown',
+      agentName: agentName || 'Unknown',
+      startTime: new Date().toISOString()
+    });
+
+    await redis.setAgentStatus(agentCode, 'on_call', {
+      agentName: agentName || 'Unknown',
+      currentCall: phoneNumber || 'Unknown'
+    });
+
+    // Broadcast updated dashboard data
+    await this.broadcastDashboardUpdate();
+
+  } catch (error) {
+    console.error('❌ Error handling call started:', error.message);
+    socket.emit('error', { message: 'Failed to record call start' });
   }
+}
 
   async handleCallEnded(socket, data) {
     try {
