@@ -184,5 +184,11 @@ class WebSocketService {
 // Create global instance
 const webSocketService = new WebSocketService();
 
-// Make available globally
+// Make available globally with both instance and class
 window.WebSocketService = webSocketService;
+window.WebSocketServiceClass = WebSocketService;
+
+// Ensure the instance has the methods available
+if (!window.WebSocketService.on) {
+  console.error('WebSocketService.on method not found');
+}

@@ -85,10 +85,15 @@ class Dashboard {
   }
 
   setupEventListeners() {
-    // WebSocket connection status
-    WebSocketService.on('connection_status', (status) => {
-      this.updateConnectionStatus(status);
-    });
+  // Ensure WebSocketService is available
+  if (!window.WebSocketService || typeof window.WebSocketService.on !== 'function') {
+    throw new Error('WebSocketService not properly initialized');
+  }
+
+  // WebSocket connection status
+  WebSocketService.on('connection_status', (status) => {
+    this.updateConnectionStatus(status);
+  });
 
     // Dashboard data updates
     WebSocketService.on('dashboard_update', (data) => {
