@@ -131,21 +131,31 @@
     <!-- Toast Notifications Container -->
     <div id="toastContainer" class="toast-container"></div>
 
-    <!-- Loading Scripts -->
-    <script src="js/utils/formatters.js"></script>
+    <!-- Load scripts in correct order -->
     <script src="js/utils/helpers.js"></script>
+    <script>
+        // Wait for Helpers to be available before loading other scripts
+        if (!window.Helpers) {
+            console.error('Helpers not loaded');
+        }
+    </script>
+    <script src="js/utils/formatters.js"></script>
     <script src="js/services/NotificationService.js"></script>
     <script src="js/services/APIService.js"></script>
-    
     <script src="js/services/WebSocketService.js"></script>
-<script>
-  // Ensure WebSocketService is ready before loading components
-  if (!window.WebSocketService) {
-    console.error('WebSocketService failed to load');
-  }
-</script>
-<script src="js/components/BaseComponent.js"></script>
-
+    <script>
+        // Verify WebSocketService is properly initialized
+        console.log('WebSocketService methods available:', !!window.WebSocketService.on);
+        if (!window.WebSocketService.on) {
+            console.error('WebSocketService.on method not available');
+            // Reload the page once to try again
+            if (!sessionStorage.getItem('wsReloaded')) {
+                sessionStorage.setItem('wsReloaded', 'true');
+                window.location.reload();
+            }
+        }
+    </script>
+    <script src="js/components/BaseComponent.js"></script>
     <script src="js/components/TalkTimeCard.js"></script>
     <script src="js/components/OnCallCard.js"></script>
     <script src="js/components/IdleTimeCard.js"></script>

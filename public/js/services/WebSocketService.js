@@ -181,14 +181,8 @@ class WebSocketService {
   }
 }
 
-// Create global instance
-const webSocketService = new WebSocketService();
+// Create and initialize global instance
+window.WebSocketService = new WebSocketService();
 
-// Make available globally with both instance and class
-window.WebSocketService = webSocketService;
-window.WebSocketServiceClass = WebSocketService;
-
-// Ensure the instance has the methods available
-if (!window.WebSocketService.on) {
-  console.error('WebSocketService.on method not found');
-}
+// Ensure the instance has all methods
+console.log('WebSocketService initialized with methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(window.WebSocketService)));
