@@ -5,516 +5,143 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Call Analytics Dashboard</title>
     <script src="/socket.io/socket.io.js"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            color: #333;
-        }
-
-        .header {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            padding: 1rem 2rem;
-            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
-            margin-bottom: 2rem;
-        }
-
-        .header h1 {
-            color: #2c3e50;
-            font-size: 2rem;
-            font-weight: 600;
-        }
-
-        .status {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-top: 0.5rem;
-        }
-
-        .status-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: #e74c3c;
-            animation: pulse 2s infinite;
-        }
-
-        .status-dot.connected {
-            background: #27ae60;
-        }
-
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 0 2rem;
-        }
-
-        .debug-info {
-            background: rgba(0, 0, 0, 0.8);
-            color: #00ff00;
-            padding: 1rem;
-            border-radius: 8px;
-            margin-bottom: 1rem;
-            font-family: monospace;
-            font-size: 0.9rem;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: 2fr 1fr 1fr;
-            gap: 2rem;
-            margin-bottom: 2rem;
-        }
-
-        .card {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 16px;
-            padding: 1.5rem;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-            border: 1px solid rgba(255,255,255,0.2);
-        }
-
-        .card h2 {
-            color: #2c3e50;
-            margin-bottom: 1rem;
-            font-size: 1.2rem;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .table-container {
-            max-height: 400px;
-            overflow-y: auto;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th, td {
-            padding: 0.75rem;
-            text-align: left;
-            border-bottom: 1px solid #ecf0f1;
-        }
-
-        th {
-            background: #f8f9fa;
-            font-weight: 600;
-            color: #2c3e50;
-            position: sticky;
-            top: 0;
-        }
-
-        tr:hover {
-            background: #f8f9fa;
-        }
-
-        .on-call-item, .idle-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.75rem;
-            margin-bottom: 0.5rem;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border-left: 4px solid #3498db;
-        }
-
-        .on-call-item {
-            border-left-color: #e74c3c;
-            background: #fff5f5;
-        }
-
-        .idle-item {
-            border-left-color: #f39c12;
-            background: #fffbf0;
-        }
-
-        .agent-name {
-            font-weight: 600;
-            color: #2c3e50;
-        }
-
-        .phone-number {
-            font-size: 0.9rem;
-            color: #7f8c8d;
-        }
-
-        .time-badge {
-            background: #3498db;
-            color: white;
-            padding: 0.25rem 0.5rem;
-            border-radius: 12px;
-            font-size: 0.8rem;
-            font-weight: 500;
-        }
-
-        .on-call-badge {
-            background: #e74c3c;
-        }
-
-        .idle-badge {
-            background: #f39c12;
-        }
-
-        .no-data {
-            text-align: center;
-            color: #7f8c8d;
-            font-style: italic;
-            padding: 2rem;
-        }
-
-        .loading {
-            text-align: center;
-            color: #7f8c8d;
-            padding: 2rem;
-        }
-
-        .error {
-            background: #fff5f5;
-            color: #e74c3c;
-            padding: 1rem;
-            border-radius: 8px;
-            margin-bottom: 1rem;
-        }
-
-        .debug-toggle {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #2c3e50;
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 4px;
-            cursor: pointer;
-            z-index: 1000;
-        }
-
-        @media (max-width: 1024px) {
-            .dashboard-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="css/components.css">
 </head>
 <body>
-    <button class="debug-toggle" onclick="toggleDebug()">Toggle Debug</button>
-    
-    <div class="header">
-        <h1>📊 Call Analytics Dashboard</h1>
-        <div class="status">
-            <div class="status-dot" id="statusDot"></div>
-            <span id="statusText">Connecting...</span>
-            <span id="lastUpdated"></span>
+    <!-- Header -->
+    <header class="dashboard-header">
+        <div class="header-content">
+            <h1>📊 Call Analytics Dashboard</h1>
+            <div class="header-status">
+                <div class="connection-status" id="connectionStatus">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="statusText">Connecting...</span>
+                </div>
+                <div class="server-stats" id="serverStats">
+                    <span id="agentCount">0 agents</span>
+                    <span id="lastUpdated"></span>
+                </div>
+            </div>
+            <button class="debug-toggle" id="debugToggle">Debug</button>
+        </div>
+    </header>
+
+    <!-- Debug Console -->
+    <div class="debug-console" id="debugConsole">
+        <div class="debug-header">
+            <h3>Debug Console</h3>
+            <button id="clearDebug">Clear</button>
+        </div>
+        <div class="debug-content" id="debugContent">
+            Dashboard initializing...
         </div>
     </div>
 
-    <div class="container">
-        <!-- Debug Console -->
-        <div class="debug-info" id="debugConsole" style="display: none;">
-            <div id="debugLog">Debug Console - Click Toggle Debug to hide</div>
-        </div>
-
-        <div class="dashboard-grid">
-            <!-- Agent Talk Time Table -->
-            <div class="card">
+    <!-- Main Dashboard Grid -->
+    <main class="dashboard-grid">
+        <!-- Talk Time Card -->
+        <div class="dashboard-card" id="talkTimeCard">
+            <div class="card-header">
                 <h2>📊 Today's Talk Time</h2>
+                <div class="card-controls">
+                    <select id="sortSelect">
+                        <option value="agentCode-asc">Agent Code ↑</option>
+                        <option value="agentCode-desc">Agent Code ↓</option>
+                        <option value="talkTime-asc">Talk Time ↑</option>
+                        <option value="talkTime-desc">Talk Time ↓</option>
+                    </select>
+                </div>
+            </div>
+            <div class="card-content">
                 <div class="table-container">
-                    <table>
+                    <table class="talk-time-table">
                         <thead>
                             <tr>
                                 <th>Agent Code</th>
                                 <th>Agent Name</th>
                                 <th>Talk Time</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
-                        <tbody id="talkTimeTable">
+                        <tbody id="talkTimeTableBody">
                             <tr>
-                                <td colspan="3" class="loading">Loading agent data...</td>
+                                <td colspan="4" class="loading">Loading agents...</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
             </div>
+        </div>
 
-            <!-- Currently On Call -->
-            <div class="card">
+        <!-- Currently On Call Card -->
+        <div class="dashboard-card" id="onCallCard">
+            <div class="card-header">
                 <h2>📞 Currently On Call</h2>
+                <div class="card-badge" id="onCallCount">0</div>
+            </div>
+            <div class="card-content">
                 <div id="onCallList">
                     <div class="loading">Loading...</div>
                 </div>
             </div>
+        </div>
 
-            <!-- Time Since Last Call -->
-            <div class="card">
+        <!-- Idle Time Card -->
+        <div class="dashboard-card" id="idleTimeCard">
+            <div class="card-header">
                 <h2>⏰ Time Since Last Call</h2>
+                <div class="card-badge" id="idleCount">0</div>
+            </div>
+            <div class="card-content">
                 <div id="idleTimeList">
                     <div class="loading">Loading...</div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <script>
-        let debugMode = false;
-
-        function toggleDebug() {
-            debugMode = !debugMode;
-            document.getElementById('debugConsole').style.display = debugMode ? 'block' : 'none';
-        }
-
-        function debugLog(message) {
-            const debugElement = document.getElementById('debugLog');
-            const timestamp = new Date().toLocaleTimeString();
-            debugElement.innerHTML += `<br>[${timestamp}] ${message}`;
-            debugElement.scrollTop = debugElement.scrollHeight;
-            console.log(message);
-        }
-
-        class Dashboard {
-            constructor() {
-                this.socket = null;
-                this.isConnected = false;
-                this.lastData = null;
-                this.init();
-            }
-
-            init() {
-                debugLog('🚀 Initializing dashboard...');
-                this.connectWebSocket();
-                this.setupUI();
-                this.startIdleTimeUpdater();
-            }
-
-            connectWebSocket() {
-                try {
-                    debugLog('🔌 Attempting WebSocket connection...');
-                    this.socket = io();
-                    
-                    this.socket.on('connect', () => {
-                        this.isConnected = true;
-                        this.updateConnectionStatus('Connected', true);
-                        debugLog('✅ WebSocket connected successfully');
-                    });
-
-                    this.socket.on('disconnect', () => {
-                        this.isConnected = false;
-                        this.updateConnectionStatus('Disconnected', false);
-                        debugLog('❌ WebSocket disconnected');
-                    });
-
-                    this.socket.on('dashboard_update', (data) => {
-                        debugLog(`📊 Dashboard update received: ${JSON.stringify(data, null, 2)}`);
-                        this.lastData = data;
-                        this.updateDashboard(data);
-                    });
-
-                    this.socket.on('connect_error', (error) => {
-                        debugLog(`❌ WebSocket connection error: ${error}`);
-                        this.updateConnectionStatus('Connection Error', false);
-                    });
-
-                } catch (error) {
-                    debugLog(`❌ Failed to initialize WebSocket: ${error}`);
-                    this.updateConnectionStatus('Failed to Connect', false);
-                }
-            }
-
-            updateConnectionStatus(status, connected) {
-                const statusDot = document.getElementById('statusDot');
-                const statusText = document.getElementById('statusText');
-                
-                statusDot.className = `status-dot ${connected ? 'connected' : ''}`;
-                statusText.textContent = status;
-                debugLog(`🔗 Connection status: ${status}`);
-            }
-
-            updateDashboard(data) {
-                debugLog(`📊 Updating dashboard with data: ${Object.keys(data)}`);
-                this.updateTalkTimeTable(data.agentsTalkTime || []);
-                this.updateOnCallList(data.agentsOnCall || []);
-                this.updateIdleTimeList(data.agentsIdleTime || []);
-                this.updateLastUpdated(data.lastUpdated);
-            }
-
-            updateTalkTimeTable(agents) {
-                const tableBody = document.getElementById('talkTimeTable');
-                debugLog(`📊 Updating talk time table with ${agents.length} agents`);
-                
-                if (agents.length === 0) {
-                    tableBody.innerHTML = '<tr><td colspan="3" class="no-data">No agent data available</td></tr>';
-                    return;
-                }
-
-                // Sort agents by agent code (ascending)
-                agents.sort((a, b) => a.agentCode.localeCompare(b.agentCode));
-
-                const rows = agents.map(agent => `
-                    <tr>
-                        <td>${agent.agentCode}</td>
-                        <td>${agent.agentName}</td>
-                        <td><strong>${agent.formattedTalkTime || this.formatDuration(agent.todayTalkTime || 0)}</strong></td>
-                    </tr>
-                `).join('');
-
-                tableBody.innerHTML = rows;
-            }
-
-            updateOnCallList(agentsOnCall) {
-                const container = document.getElementById('onCallList');
-                debugLog(`📞 Updating on-call list with ${agentsOnCall.length} agents`);
-                
-                if (agentsOnCall.length === 0) {
-                    container.innerHTML = '<div class="no-data">📴 No agents currently on call</div>';
-                    return;
-                }
-
-                const items = agentsOnCall.map(agent => {
-                    const callDuration = this.calculateCallDuration(agent.callStartTime);
-                    return `
-                        <div class="on-call-item">
-                            <div>
-                                <div class="agent-name">${agent.agentCode} - ${agent.agentName}</div>
-                                <div class="phone-number">${agent.phoneNumber || 'Unknown'}</div>
-                            </div>
-                            <span class="time-badge on-call-badge">${callDuration}</span>
-                        </div>
-                    `;
-                }).join('');
-
-                container.innerHTML = items;
-            }
-
-            updateIdleTimeList(agentsIdle) {
-                const container = document.getElementById('idleTimeList');
-                debugLog(`⏰ Updating idle list with ${agentsIdle.length} agents`);
-                
-                if (agentsIdle.length === 0) {
-                    container.innerHTML = '<div class="no-data">📞 All agents recently active</div>';
-                    return;
-                }
-
-                const items = agentsIdle.map(agent => `
-                    <div class="idle-item">
-                        <div>
-                            <div class="agent-name">${agent.agentCode} - ${agent.agentName}</div>
-                        </div>
-                        <span class="time-badge idle-badge">${agent.minutesSinceLastCall}m ago</span>
+        <!-- Server Stats Card -->
+        <div class="dashboard-card" id="statsCard">
+            <div class="card-header">
+                <h2>📈 Server Statistics</h2>
+            </div>
+            <div class="card-content">
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="totalAgents">0</div>
+                        <div class="stat-label">Total Agents</div>
                     </div>
-                `).join('');
+                    <div class="stat-item">
+                        <div class="stat-value" id="onlineAgents">0</div>
+                        <div class="stat-label">Online Now</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="todayCalls">0</div>
+                        <div class="stat-label">Today's Calls</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="activeCalls">0</div>
+                        <div class="stat-label">Active Calls</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
 
-                container.innerHTML = items;
-            }
+    <!-- Toast Notifications Container -->
+    <div id="toastContainer" class="toast-container"></div>
 
-            updateLastUpdated(timestamp) {
-                const element = document.getElementById('lastUpdated');
-                if (timestamp) {
-                    const date = new Date(timestamp);
-                    element.textContent = `Last updated: ${date.toLocaleTimeString()}`;
-                }
-            }
-
-            calculateCallDuration(startTime) {
-                if (!startTime) return '0m';
-                
-                const start = new Date(startTime);
-                const now = new Date();
-                const diffMinutes = Math.floor((now - start) / (1000 * 60));
-                
-                if (diffMinutes < 1) return '<1m';
-                return `${diffMinutes}m`;
-            }
-
-            formatDuration(seconds) {
-                const hours = Math.floor(seconds / 3600);
-                const minutes = Math.floor((seconds % 3600) / 60);
-                const remainingSeconds = seconds % 60;
-
-                if (hours > 0) {
-                    return `${hours}h ${minutes}m ${remainingSeconds}s`;
-                } else if (minutes > 0) {
-                    return `${minutes}m ${remainingSeconds}s`;
-                } else {
-                    return `${remainingSeconds}s`;
-                }
-            }
-
-            startIdleTimeUpdater() {
-                setInterval(() => {
-                    if (this.lastData && this.lastData.agentsIdleTime) {
-                        const updatedAgents = this.lastData.agentsIdleTime.map(agent => {
-                            if (agent.lastCallEnd) {
-                                const lastCallEnd = new Date(agent.lastCallEnd);
-                                const now = new Date();
-                                const minutesSinceLastCall = Math.floor((now - lastCallEnd) / (1000 * 60));
-                                return { ...agent, minutesSinceLastCall };
-                            }
-                            return agent;
-                        });
-                        
-                        this.updateIdleTimeList(updatedAgents);
-                    }
-                }, 30000);
-            }
-
-            setupUI() {
-                debugLog('🔧 Loading initial data from API...');
-                
-                fetch('/api/dashboard/live')
-                    .then(response => {
-                        debugLog(`📡 API response status: ${response.status}`);
-                        return response.json();
-                    })
-                    .then(result => {
-                        debugLog(`📡 API response: ${JSON.stringify(result, null, 2)}`);
-                        
-                        if (result.success) {
-                            this.lastData = result.data;
-                            this.updateDashboard(result.data);
-                        } else {
-                            debugLog(`❌ API returned error: ${result.error || 'Unknown error'}`);
-                        }
-                    })
-                    .catch(error => {
-                        debugLog(`❌ Error loading initial data: ${error}`);
-                        
-                        // Show error in UI
-                        document.getElementById('talkTimeTable').innerHTML = 
-                            `<tr><td colspan="3" class="error">Error loading data: ${error.message}</td></tr>`;
-                        document.getElementById('onCallList').innerHTML = 
-                            `<div class="error">Error loading data: ${error.message}</div>`;
-                        document.getElementById('idleTimeList').innerHTML = 
-                            `<div class="error">Error loading data: ${error.message}</div>`;
-                    });
-            }
-        }
-
-        // Initialize dashboard when page loads
-        document.addEventListener('DOMContentLoaded', () => {
-            new Dashboard();
-        });
-    </script>
+    <!-- Loading Scripts -->
+    <script src="js/utils/formatters.js"></script>
+    <script src="js/utils/helpers.js"></script>
+    <script src="js/services/NotificationService.js"></script>
+    <script src="js/services/APIService.js"></script>
+    <script src="js/services/WebSocketService.js"></script>
+    <script src="js/components/BaseComponent.js"></script>
+    <script src="js/components/TalkTimeCard.js"></script>
+    <script src="js/components/OnCallCard.js"></script>
+    <script src="js/components/IdleTimeCard.js"></script>
+    <script src="js/components/StatsCard.js"></script>
+    <script src="js/main.js"></script>
 </body>
 </html>

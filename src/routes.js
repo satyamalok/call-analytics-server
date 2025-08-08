@@ -346,4 +346,73 @@ router.post('/reminder-settings-bulk', async (req, res) => {
   }
 });
 
+router.post('/agents/:agentCode/remove', async (req, res) => {
+  try {
+    const { agentCode } = req.params;
+
+    if (!agentCode) {
+      return res.status(400).json({
+        success: false,
+        error: 'Agent code is required'
+      });
+    }
+
+    // Remove agent from active status but keep call history
+    await database.updateAgentStatus(agentCode, 'removed');
+    
+    // Remove from Redis active agents
+    await redis.setAgentStatus(agentCode, 'removed');
+    
+    // Clear any active call data
+    await redis.setCallEnd(agentCode);
+
+    console.log(`🗑️ Agent ${agentCode} removed from dashboard`);
+
+    res.json({
+      success: true,
+      message: `Agent ${agentCode} removed successfully`,
+      agentCode
+    });
+
+  } catch (error) {
+    console.error('❌ Error removing agent:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// NEW: Reset/restore agent
+router.post('/agents/:agentCode/restore', async (req, res) => {
+  try {
+    const { agentCode } = req.params;
+
+    if (!agentCode) {
+      return res.status(400).json({
+        success: false,
+        error: 'Agent code is required'
+      });
+    }
+
+    // Restore agent to offline status (will be online when they connect)
+    await database.updateAgentStatus(agentCode, 'offline');
+    
+    console.log(`♻️ Agent ${agentCode} restored to dashboard`);
+
+    res.json({
+      success: true,
+      message: `Agent ${agentCode} restored successfully`,
+      agentCode
+    });
+
+  } catch (error) {
+    console.error('❌ Error restoring agent:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

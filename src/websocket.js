@@ -6,6 +6,7 @@ class WebSocketManager {
     this.io = io;
     this.recentReminders = new Set(); // Track sent reminders to prevent duplicates
     this.connectedAgents = new Map(); // agentCode -> socketId
+    this.activeCallTimers = new Map()
     this.init();
     this.startReminderSystem(); // ADD THIS LINE
   }
@@ -110,40 +111,43 @@ class WebSocketManager {
   }
 
   async handleCallStarted(socket, data) {
-  try {
-    const { agentCode, agentName, phoneNumber, callType } = data;
-    
-    if (!agentCode) {
-      socket.emit('error', { message: 'Agent code required' });
-      return;
+    try {
+      const { agentCode, agentName, phoneNumber, callType } = data;
+      
+      if (!agentCode) {
+        socket.emit('error', { message: 'Agent code required' });
+        return;
+      }
+
+      console.log(`📞 Call started: ${agentCode} -> ${phoneNumber} (${callType})`);
+
+      // Update database agent status
+      await database.updateAgentStatus(agentCode, 'on_call');
+
+      // Update Redis with call data
+      await redis.setCallStart(agentCode, {
+        phoneNumber: phoneNumber || 'Unknown',
+        callType: callType || 'unknown',
+        agentName: agentName || 'Unknown',
+        startTime: new Date().toISOString()
+      });
+
+      await redis.setAgentStatus(agentCode, 'on_call', {
+        agentName: agentName || 'Unknown',
+        currentCall: phoneNumber || 'Unknown'
+      });
+
+      // NEW: Start server-side call timer
+      this.startCallTimer(agentCode, agentName, phoneNumber, callType);
+
+      // Broadcast updated dashboard data
+      await this.broadcastDashboardUpdate();
+
+    } catch (error) {
+      console.error('❌ Error handling call started:', error.message);
+      socket.emit('error', { message: 'Failed to record call start' });
     }
-
-    console.log(`📞 Call started: ${agentCode} -> ${phoneNumber} (${callType})`);
-
-    // Update database agent status
-    await database.updateAgentStatus(agentCode, 'on_call');
-
-    // Update Redis with call data - FIXED: Better call data structure
-    await redis.setCallStart(agentCode, {
-      phoneNumber: phoneNumber || 'Unknown',
-      callType: callType || 'unknown',
-      agentName: agentName || 'Unknown',
-      startTime: new Date().toISOString()
-    });
-
-    await redis.setAgentStatus(agentCode, 'on_call', {
-      agentName: agentName || 'Unknown',
-      currentCall: phoneNumber || 'Unknown'
-    });
-
-    // Broadcast updated dashboard data
-    await this.broadcastDashboardUpdate();
-
-  } catch (error) {
-    console.error('❌ Error handling call started:', error.message);
-    socket.emit('error', { message: 'Failed to record call start' });
   }
-}
 
   async handleCallEnded(socket, data) {
     try {
@@ -156,6 +160,9 @@ class WebSocketManager {
 
       console.log(`📴 Call ended: ${agentCode} -> ${callData.phoneNumber} (${callData.talkDuration}s)`);
 
+      // NEW: Stop server-side call timer
+      const timerData = this.stopCallTimer(agentCode);
+      
       // Insert call into database
       await database.insertCall({
         agentCode,
@@ -190,13 +197,17 @@ class WebSocketManager {
     }
   }
 
+  // NEW: Clean up timers on disconnect
   handleDisconnect(socket) {
     console.log(`🔌 Client disconnected: ${socket.id}`);
     
     if (socket.agentCode) {
       console.log(`👤 Agent disconnected: ${socket.agentCode}`);
       
-      // Update agent to offline (don't await to prevent blocking)
+      // Stop any active call timer for this agent
+      this.stopCallTimer(socket.agentCode);
+      
+      // Update agent to offline
       database.updateAgentStatus(socket.agentCode, 'offline').catch(console.error);
       redis.setAgentStatus(socket.agentCode, 'offline').catch(console.error);
       
@@ -222,19 +233,21 @@ class WebSocketManager {
       // Get today's talk time from database (more accurate)
       const todayTalkTime = await database.getTodayTalkTime();
       
-      // Get active calls from Redis
-      const activeCalls = await redis.getAllActiveCalls();
+      // NEW: Get active calls from server timers instead of Redis
+      const activeCallTimers = this.getActiveCallTimers();
       
       // Get all agents status from Redis
       const agentsStatus = await redis.getAllAgentsStatus();
 
-      // Format agents on call
-      const agentsOnCall = Object.entries(activeCalls).map(([agentCode, callData]) => ({
-        agentCode,
-        agentName: callData.agentName || 'Unknown',
-        phoneNumber: callData.phoneNumber,
-        callStartTime: callData.startTime,
-        callType: callData.callType
+      // Format agents on call using server timers
+      const agentsOnCall = Object.values(activeCallTimers).map(timer => ({
+        agentCode: timer.agentCode,
+        agentName: timer.agentName,
+        phoneNumber: timer.phoneNumber,
+        callStartTime: timer.startTime,
+        callType: timer.callType,
+        currentDuration: timer.duration,
+        formattedDuration: timer.formattedDuration
       }));
 
       // Calculate idle times for agents not on call
@@ -243,7 +256,7 @@ class WebSocketManager {
 
       for (const agent of todayTalkTime) {
         // Skip if agent is currently on call
-        if (activeCalls[agent.agent_code]) continue;
+        if (activeCallTimers[agent.agent_code]) continue;
 
         const agentStatus = agentsStatus[agent.agent_code];
         if (agentStatus && agentStatus.status === 'online' && agentStatus.lastCallEnd) {
@@ -438,13 +451,101 @@ async handleReminderAcknowledgment(socket, data) {
   console.log('✅ Reminder system started - checking every minute');
 }
 
-// Update cleanup method to clear interval
-cleanup() {
-  if (this.reminderInterval) {
-    clearInterval(this.reminderInterval);
-    console.log('✅ Reminder system stopped');
+//new codes - A
+// NEW: Start call timer for agent
+  startCallTimer(agentCode, agentName, phoneNumber, callType) {
+    try {
+      // Clear existing timer if any
+      this.stopCallTimer(agentCode);
+
+      const timerData = {
+        agentCode,
+        agentName,
+        phoneNumber,
+        callType,
+        startTime: new Date(),
+        duration: 0,
+        interval: setInterval(() => {
+          timerData.duration++;
+          // Broadcast updated duration every second
+          this.broadcastCallTimerUpdate(agentCode, timerData);
+        }, 1000)
+      };
+
+      this.activeCallTimers.set(agentCode, timerData);
+      console.log(`⏱️ Started call timer for ${agentCode} -> ${phoneNumber}`);
+
+    } catch (error) {
+      console.error('❌ Error starting call timer:', error.message);
+    }
   }
-}
+
+  // NEW: Stop call timer for agent
+  stopCallTimer(agentCode) {
+    try {
+      const timerData = this.activeCallTimers.get(agentCode);
+      if (timerData) {
+        clearInterval(timerData.interval);
+        this.activeCallTimers.delete(agentCode);
+        console.log(`⏱️ Stopped call timer for ${agentCode} after ${timerData.duration}s`);
+        return timerData;
+      }
+    } catch (error) {
+      console.error('❌ Error stopping call timer:', error.message);
+    }
+    return null;
+  }
+
+  // NEW: Broadcast timer update to dashboard
+  broadcastCallTimerUpdate(agentCode, timerData) {
+    try {
+      this.io.emit('call_timer_update', {
+        agentCode,
+        agentName: timerData.agentName,
+        phoneNumber: timerData.phoneNumber,
+        callType: timerData.callType,
+        duration: timerData.duration,
+        formattedDuration: this.formatDuration(timerData.duration)
+      });
+    } catch (error) {
+      console.error('❌ Error broadcasting timer update:', error.message);
+    }
+  }
+
+  // NEW: Get all active call timers for dashboard
+  getActiveCallTimers() {
+    const timers = {};
+    for (const [agentCode, timerData] of this.activeCallTimers.entries()) {
+      timers[agentCode] = {
+        agentCode: timerData.agentCode,
+        agentName: timerData.agentName,
+        phoneNumber: timerData.phoneNumber,
+        callType: timerData.callType,
+        duration: timerData.duration,
+        formattedDuration: this.formatDuration(timerData.duration),
+        startTime: timerData.startTime.toISOString()
+      };
+    }
+    return timers;
+  }
+
+
+// Enhanced cleanup method
+  cleanup() {
+    // Clear all call timers
+    for (const [agentCode, timerData] of this.activeCallTimers.entries()) {
+      clearInterval(timerData.interval);
+    }
+    this.activeCallTimers.clear();
+
+    if (this.reminderInterval) {
+      clearInterval(this.reminderInterval);
+      console.log('✅ Reminder system stopped');
+    }
+    
+    console.log('✅ All timers cleared');
+  }
+
 
   // Method to get connected agents count
   getConnectedAgentsCount() {

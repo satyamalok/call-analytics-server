@@ -139,26 +139,27 @@ class Database {
 
   // Analytics methods
   async getTodayTalkTime() {
-    const query = `
-      SELECT 
-        a.agent_code,
-        a.agent_name,
-        COALESCE(SUM(c.talk_duration), 0) as today_talk_time
-      FROM agents a
-      LEFT JOIN calls c ON a.agent_code = c.agent_code 
-        AND c.call_date = CURRENT_DATE
-      GROUP BY a.agent_code, a.agent_name
-      ORDER BY a.agent_code ASC
-    `;
-    
-    try {
-      const result = await this.pool.query(query);
-      return result.rows;
-    } catch (error) {
-      console.error('❌ Error getting today talk time:', error.message);
-      throw error;
-    }
+  const query = `
+    SELECT 
+      a.agent_code,
+      a.agent_name,
+      COALESCE(SUM(c.talk_duration), 0) as today_talk_time
+    FROM agents a
+    LEFT JOIN calls c ON a.agent_code = c.agent_code 
+      AND c.call_date = CURRENT_DATE
+    WHERE a.status != 'removed'  -- NEW: Exclude removed agents
+    GROUP BY a.agent_code, a.agent_name
+    ORDER BY a.agent_code ASC
+  `;
+  
+  try {
+    const result = await this.pool.query(query);
+    return result.rows;
+  } catch (error) {
+    console.error('❌ Error getting today talk time:', error.message);
+    throw error;
   }
+}
 
   async getAgentHistory(agentCode, startDate, endDate) {
     const query = `
