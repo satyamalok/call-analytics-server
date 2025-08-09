@@ -10,21 +10,24 @@
 <body>
     <!-- Header -->
     <header class="dashboard-header">
-        <div class="header-content">
-            <h1>📊 Call Analytics Dashboard</h1>
-            <div class="header-status">
-                <div class="connection-status" id="connectionStatus">
-                    <div class="status-dot" id="statusDot"></div>
-                    <span id="statusText">Connecting...</span>
-                </div>
-                <div class="server-stats" id="serverStats">
-                    <span id="agentCount">0 agents</span>
-                    <span id="lastUpdated"></span>
-                </div>
-            </div>
-            <button class="debug-toggle" id="debugToggle">Debug</button>
-        </div>
-    </header>
+  <div class="header-content">
+    <h1>📊 Call Analytics Dashboard</h1>
+    <div class="header-status">
+      <div class="connection-status" id="connectionStatus">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">Connecting...</span>
+      </div>
+      <div class="server-stats" id="serverStats">
+        <span id="agentCount">0 agents</span>
+        <span id="lastUpdated"></span>
+      </div>
+    </div>
+    <div class="header-controls">
+      <button class="settings-toggle" id="settingsToggle">⚙️ Settings</button>
+      <button class="debug-toggle" id="debugToggle">Debug</button>
+    </div>
+  </div>
+</header>
 
     <!-- Debug Console -->
     <div class="debug-console" id="debugConsole">
@@ -36,6 +39,39 @@
             Dashboard initializing...
         </div>
     </div>
+
+    <!-- Settings Panel -->
+<div class="settings-panel" id="settingsPanel">
+  <div class="settings-header">
+    <h3>⚙️ Agent Reminder Settings</h3>
+    <button id="closeSettings">✕</button>
+  </div>
+  <div class="settings-content">
+    <div class="settings-controls">
+      <button id="enableAllReminders" class="btn-success">Enable All</button>
+      <button id="disableAllReminders" class="btn-warning">Disable All</button>
+      <button id="saveAllSettings" class="btn-primary">💾 Save All Changes</button>
+    </div>
+    <div class="settings-table-container">
+      <table class="settings-table">
+        <thead>
+          <tr>
+            <th>Agent Code</th>
+            <th>Agent Name</th>
+            <th>Status</th>
+            <th>Interval (min)</th>
+            <th>Enabled</th>
+          </tr>
+        </thead>
+        <tbody id="settingsTableBody">
+          <tr>
+            <td colspan="5" class="loading">Loading settings...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
 
     <!-- Main Dashboard Grid -->
     <main class="dashboard-grid">

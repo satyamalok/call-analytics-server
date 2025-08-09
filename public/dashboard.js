@@ -341,12 +341,12 @@ function updateTalkTimeTable(agents) {
       <td><span class="talk-time-value">${agent.formattedTalkTime}</span></td>
       <td>
         <button 
-          class="remove-agent-btn" 
-          onclick="removeAgent('${agent.agentCode}')"
-          title="Remove agent from dashboard"
-          aria-label="Remove ${agent.agentCode}">
-          ❌
-        </button>
+  class="remove-agent-btn" 
+  data-agent-code="${agent.agentCode}"
+  title="Remove agent from dashboard"
+  aria-label="Remove ${agent.agentCode}">
+  ❌
+</button>
       </td>
     </tr>
   `).join('');
@@ -563,16 +563,113 @@ function showError(message) {
 
 // Event Handlers
 function setupEventListeners() {
- // Debug console toggle
- const debugToggle = document.getElementById('debugToggle');
- const debugConsole = document.getElementById('debugConsole');
- 
- if (debugToggle && debugConsole) {
-   debugToggle.addEventListener('click', () => {
-     debugConsole.classList.toggle('show');
-     debugToggle.textContent = debugConsole.classList.contains('show') ? 'Hide Debug' : 'Debug';
-   });
- }
+  // Debug console toggle
+  const debugToggle = document.getElementById('debugToggle');
+  const debugConsole = document.getElementById('debugConsole');
+  
+  if (debugToggle && debugConsole) {
+    debugToggle.addEventListener('click', () => {
+      debugConsole.classList.toggle('show');
+      debugToggle.textContent = debugConsole.classList.contains('show') ? 'Hide Debug' : 'Debug';
+    });
+  }
+
+  // Settings panel toggle
+  const settingsToggle = document.getElementById('settingsToggle');
+  const settingsPanel = document.getElementById('settingsPanel');
+  const closeSettings = document.getElementById('closeSettings');
+  
+  if (settingsToggle && settingsPanel) {
+    settingsToggle.addEventListener('click', () => {
+      settingsPanel.classList.add('show');
+      loadAgentSettings();
+    });
+  }
+  
+  if (closeSettings && settingsPanel) {
+    closeSettings.addEventListener('click', () => {
+      settingsPanel.classList.remove('show');
+    });
+  }
+
+  // Settings panel controls
+  const enableAllBtn = document.getElementById('enableAllReminders');
+  const disableAllBtn = document.getElementById('disableAllReminders');
+  const saveAllBtn = document.getElementById('saveAllSettings');
+  
+  if (enableAllBtn) {
+    enableAllBtn.addEventListener('click', () => {
+      document.querySelectorAll('.reminder-checkbox').forEach(checkbox => {
+        checkbox.checked = true;
+      });
+    });
+  }
+  
+  if (disableAllBtn) {
+    disableAllBtn.addEventListener('click', () => {
+      document.querySelectorAll('.reminder-checkbox').forEach(checkbox => {
+        checkbox.checked = false;
+      });
+    });
+  }
+  
+  if (saveAllBtn) {
+    saveAllBtn.addEventListener('click', saveAllAgentSettings);
+  }
+
+  // Clear debug console
+  const clearDebug = document.getElementById('clearDebug');
+  if (clearDebug) {
+    clearDebug.addEventListener('click', () => {
+      const debugContent = document.getElementById('debugContent');
+      if (debugContent) {
+        debugContent.textContent = 'Debug console cleared\n';
+      }
+    });
+  }
+
+  // Sort dropdown
+  const sortSelect = document.getElementById('sortSelect');
+  if (sortSelect) {
+    sortSelect.addEventListener('change', (e) => {
+      const [newSortBy, newDirection] = e.target.value.split('-');
+      sortBy = newSortBy;
+      sortDirection = newDirection;
+      
+      if (dashboardData.agentsTalkTime) {
+        updateTalkTimeTable(dashboardData.agentsTalkTime);
+      }
+      
+      debugLog(`Talk time sorting changed: ${sortBy} ${sortDirection}`);
+    });
+  }
+
+  // Event delegation for remove agent buttons
+  document.addEventListener('click', (e) => {
+    if (e.target.classList.contains('remove-agent-btn')) {
+      const agentCode = e.target.getAttribute('data-agent-code');
+      if (agentCode) {
+        removeAgent(agentCode);
+      }
+    }
+  });
+
+  // Window events
+  window.addEventListener('beforeunload', cleanup);
+  
+  // Visibility change (tab switching)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      onTabVisible();
+    } else {
+      onTabHidden();
+    }
+  });
+
+  // Online/offline events
+  window.addEventListener('online', onNetworkOnline);
+  window.addEventListener('offline', onNetworkOffline);
+}
 
  // Clear debug console
  const clearDebug = document.getElementById('clearDebug');
@@ -616,7 +713,7 @@ function setupEventListeners() {
  // Online/offline events
  window.addEventListener('online', onNetworkOnline);
  window.addEventListener('offline', onNetworkOffline);
-}
+
 
 function onTabVisible() {
  debugLog('Tab became visible - resuming updates');
@@ -672,6 +769,112 @@ async function init() {
    showToast(`Failed to initialize dashboard: ${error.message}`, 'error');
    showError(`Dashboard initialization failed: ${error.message}`);
  }
+}
+
+// Settings Management Functions
+async function loadAgentSettings() {
+  try {
+    const result = await fetchAPI('/reminder-settings');
+    if (result.success) {
+      updateSettingsTable(result.data);
+    }
+  } catch (error) {
+    debugLog('Failed to load agent settings:', error.message);
+    showToast('Failed to load settings', 'error');
+  }
+}
+
+function updateSettingsTable(settings) {
+  const tbody = document.getElementById('settingsTableBody');
+  if (!tbody) return;
+
+  if (!settings || settings.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="no-data">No agents found</td></tr>';
+    return;
+  }
+
+  const rows = settings.map(setting => {
+    const statusClass = `status-${setting.agent_status || 'offline'}`;
+    const statusText = (setting.agent_status || 'offline').replace('_', ' ').toUpperCase();
+    
+    return `
+      <tr data-agent-code="${setting.agent_code}">
+        <td><strong>${sanitizeHTML(setting.agent_code)}</strong></td>
+        <td>${sanitizeHTML(setting.agent_name || 'Unknown')}</td>
+        <td><span class="agent-status ${statusClass}">${statusText}</span></td>
+        <td>
+          <input 
+            type="number" 
+            class="interval-input" 
+            min="1" 
+            max="60" 
+            value="${setting.reminder_interval_minutes || 5}"
+            data-agent-code="${setting.agent_code}"
+          />
+        </td>
+        <td>
+          <label class="reminder-toggle">
+            <input 
+              type="checkbox" 
+              class="reminder-checkbox"
+              data-agent-code="${setting.agent_code}"
+              ${setting.reminders_enabled ? 'checked' : ''}
+            />
+            <span class="toggle-slider"></span>
+          </label>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  tbody.innerHTML = rows;
+}
+
+async function saveAllAgentSettings() {
+  try {
+    const settings = [];
+    const rows = document.querySelectorAll('#settingsTableBody tr[data-agent-code]');
+    
+    rows.forEach(row => {
+      const agentCode = row.getAttribute('data-agent-code');
+      const intervalInput = row.querySelector('.interval-input');
+      const reminderCheckbox = row.querySelector('.reminder-checkbox');
+      
+      if (agentCode && intervalInput && reminderCheckbox) {
+        settings.push({
+          agentCode: agentCode,
+          reminder_interval_minutes: parseInt(intervalInput.value),
+          reminders_enabled: reminderCheckbox.checked
+        });
+      }
+    });
+
+    if (settings.length === 0) {
+      showToast('No settings to save', 'warning');
+      return;
+    }
+
+    showToast('Saving settings...', 'info');
+
+    const response = await fetch('/api/reminder-settings-bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      showToast(`Settings saved for ${settings.length} agents`, 'success');
+      debugLog('Settings saved successfully', result);
+    } else {
+      throw new Error(result.error || 'Failed to save settings');
+    }
+
+  } catch (error) {
+    debugLog('Failed to save settings:', error.message);
+    showToast(`Failed to save settings: ${error.message}`, 'error');
+  }
 }
 
 function cleanup() {

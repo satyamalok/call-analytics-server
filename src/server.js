@@ -36,21 +36,20 @@ class CallAnalyticsServer {
   setupMiddleware() {
     // Updated Helmet configuration to allow inline scripts for dashboard
     this.app.use(helmet({
-      contentSecurityPolicy: {
-        directives: {
-          defaultSrc: ["'self'"],
-          scriptSrc: [
-            "'self'", 
-            "'unsafe-inline'",  // Allow inline scripts
-            "https://cdnjs.cloudflare.com"  // For socket.io CDN
-          ],
-          styleSrc: ["'self'", "'unsafe-inline'"],  // Allow inline styles
-          connectSrc: ["'self'", "ws:", "wss:"],  // Allow WebSocket connections
-          imgSrc: ["'self'", "data:", "https:"],
-          fontSrc: ["'self'", "https:", "data:"]
-        }
-      }
-    }));
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: [
+        "'self'", 
+        "https://cdnjs.cloudflare.com"  // For socket.io CDN
+      ],
+      styleSrc: ["'self'", "'unsafe-inline'"],  // Allow inline styles
+      connectSrc: ["'self'", "ws:", "wss:"],  // Allow WebSocket connections
+      imgSrc: ["'self'", "data:", "https:"],
+      fontSrc: ["'self'", "https:", "data:"]
+    }
+  }
+}));
     
     // CORS middleware
     this.app.use(cors({

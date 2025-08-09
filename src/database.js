@@ -278,22 +278,18 @@ async getAllAgentReminderSettings() {
 }
 
 async getEnabledAgentReminders() {
-  const query = `
-    SELECT 
-      ars.*,
-      a.agent_name,
-      a.status as agent_status
-    FROM agent_reminder_settings ars
-    LEFT JOIN agents a ON ars.agent_code = a.agent_code
-    WHERE ars.reminders_enabled = true
-    ORDER BY ars.agent_code ASC
-  `;
-  
   try {
-    const result = await this.pool.query(query);
-    return result.rows;
+    const enabledAgents = agentManager.getEnabledReminderAgents();
+    console.log(`📊 JSON: Found ${enabledAgents.length} agents with reminders enabled`);
+    return enabledAgents.map(agent => ({
+      agent_code: agent.agentCode,
+      agent_name: agent.agentName,
+      reminder_interval_minutes: agent.reminderSettings.intervalMinutes,
+      reminders_enabled: agent.reminderSettings.enabled,
+      agent_status: agent.status
+    }));
   } catch (error) {
-    console.error('❌ Error getting enabled agent reminders:', error.message);
+    console.error('❌ Error getting enabled agent reminders via JSON:', error.message);
     throw error;
   }
 }

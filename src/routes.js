@@ -443,4 +443,48 @@ router.post('/agents/:agentCode/restore', async (req, res) => {
   }
 });
 
+// Bulk update reminder settings (JSON-based)
+router.post('/reminder-settings-bulk', async (req, res) => {
+  try {
+    const { settings } = req.body;
+
+    if (!Array.isArray(settings)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Settings must be an array'
+      });
+    }
+
+    const results = [];
+
+    for (const setting of settings) {
+      const { agentCode, reminder_interval_minutes, reminders_enabled } = setting;
+      
+      try {
+        const result = await agentManager.updateReminderSettings(
+          agentCode,
+          parseInt(reminder_interval_minutes),
+          reminders_enabled
+        );
+        results.push({ success: true, agentCode, data: result });
+      } catch (error) {
+        results.push({ success: false, agentCode, error: error.message });
+      }
+    }
+
+    res.json({
+      success: true,
+      data: results,
+      message: `Bulk update completed for ${results.length} agents`
+    });
+
+  } catch (error) {
+    console.error('❌ Error bulk updating reminder settings:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

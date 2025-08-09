@@ -307,8 +307,8 @@ class WebSocketManager {
   // Reminder system methods
 async checkAndSendReminders() {
   try {
-    // Get all enabled agent reminder settings
-    const enabledReminders = await database.getEnabledAgentReminders();
+    // Get all enabled agent reminder settings from JSON
+    const enabledReminders = require('./services/agentManager').getEnabledReminderAgents();
     
     if (enabledReminders.length === 0) {
       return; // No agents have reminders enabled
@@ -321,8 +321,9 @@ async checkAndSendReminders() {
     const now = new Date();
 
     for (const reminder of enabledReminders) {
-      const { agent_code, reminder_interval_minutes, agent_name } = reminder;
-      
+  const { agentCode, agentName, reminderSettings } = reminder;
+  const reminder_interval_minutes = reminderSettings.intervalMinutes;
+
       // Skip if agent is currently on call
       if (activeCalls[agent_code]) {
         continue;
@@ -335,15 +336,15 @@ async checkAndSendReminders() {
       }
 
       // Check if agent has been idle long enough
-      if (agentStatus.lastCallEnd) {
-        const lastCallEnd = new Date(agentStatus.lastCallEnd);
-        const minutesIdle = Math.floor((now - lastCallEnd) / (1000 * 60));
-        
-        // Check if we should send a reminder (at multiples of interval)
-        if (this.shouldSendReminder(agent_code, minutesIdle, reminder_interval_minutes)) {
-          await this.sendReminderToAgent(agent_code, agent_name, minutesIdle, reminder_interval_minutes);
-        }
-      }
+if (agentStatus.lastCallEnd) {
+  const lastCallEnd = new Date(agentStatus.lastCallEnd);
+  const minutesIdle = Math.floor((now - lastCallEnd) / (1000 * 60));
+  
+  // Check if we should send a reminder (at multiples of interval)
+  if (this.shouldSendReminder(agentCode, minutesIdle, reminder_interval_minutes)) {
+    await this.sendReminderToAgent(agentCode, agentName, minutesIdle, reminder_interval_minutes);
+  }
+}
     }
 
   } catch (error) {
