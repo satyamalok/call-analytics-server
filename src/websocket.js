@@ -111,16 +111,22 @@ class WebSocketManager {
   }
 
   async handleCallStarted(socket, data) {
-    try {
-      const { agentCode, agentName, phoneNumber, callType } = data;
-      
-      if (!agentCode) {
-        socket.emit('error', { message: 'Agent code required' });
-        return;
-      }
+  try {
+    const { agentCode, agentName, phoneNumber, callType } = data;
+    
+    if (!agentCode) {
+      socket.emit('error', { message: 'Agent code required' });
+      return;
+    }
 
+    // 🎯 ENHANCED: Better logging for incoming vs outgoing
+    if (callType === 'incoming' && phoneNumber === 'Incoming Call') {
+      console.log(`📞 Incoming call answered: ${agentCode} (${agentName})`);
+    } else if (callType === 'outgoing') {
+      console.log(`📞 Outgoing call started: ${agentCode} -> ${phoneNumber}`);
+    } else {
       console.log(`📞 Call started: ${agentCode} -> ${phoneNumber} (${callType})`);
-
+    }
       // Update database agent status
       await database.updateAgentStatus(agentCode, 'on_call');
 
