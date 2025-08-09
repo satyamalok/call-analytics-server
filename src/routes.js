@@ -1,8 +1,9 @@
 const express = require('express');
 const database = require('./database');
 const redis = require('./redis');
-const router = express.Router();
 const agentManager = require('./services/agentManager');
+const router = express.Router();
+
 
 // Health check endpoint
 router.get('/health', async (req, res) => {
@@ -220,7 +221,15 @@ function formatDuration(seconds) {
 // Agent reminder settings routes
 router.get('/reminder-settings', async (req, res) => {
   try {
-    const settings = await database.getAllAgentReminderSettings();
+    const settings = agentManager.getAllAgents().map(agent => ({
+      agent_code: agent.agentCode,
+      agent_name: agent.agentName,
+      reminder_interval_minutes: agent.reminderSettings?.intervalMinutes || 5,
+      reminders_enabled: agent.reminderSettings?.enabled !== false,
+      agent_status: agent.status || 'offline'
+    }));
+    
+    console.log(`📊 JSON: Loaded ${settings.length} agent reminder settings`);
     
     res.json({
       success: true,
@@ -239,14 +248,22 @@ router.get('/reminder-settings', async (req, res) => {
 router.get('/reminder-settings/:agentCode', async (req, res) => {
   try {
     const { agentCode } = req.params;
-    const settings = await database.getAgentReminderSettings(agentCode);
+    const agent = agentManager.getAgent(agentCode);
     
-    if (!settings) {
+    if (!agent) {
       return res.status(404).json({
         success: false,
-        error: 'Agent reminder settings not found'
+        error: 'Agent not found'
       });
     }
+
+    const settings = {
+      agent_code: agent.agentCode,
+      agent_name: agent.agentName,
+      reminder_interval_minutes: agent.reminderSettings?.intervalMinutes || 5,
+      reminders_enabled: agent.reminderSettings?.enabled !== false,
+      agent_status: agent.status || 'offline'
+    };
 
     res.json({
       success: true,
@@ -268,10 +285,10 @@ router.post('/reminder-settings/:agentCode', async (req, res) => {
     const { reminder_interval_minutes, reminders_enabled } = req.body;
 
     // Validation
-    if (!reminder_interval_minutes || reminder_interval_minutes < 1) {
+    if (!reminder_interval_minutes || reminder_interval_minutes < 1 || reminder_interval_minutes > 60) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid reminder interval. Must be at least 1 minute.'
+        error: 'Invalid reminder interval. Must be between 1-60 minutes.'
       });
     }
 
@@ -282,15 +299,29 @@ router.post('/reminder-settings/:agentCode', async (req, res) => {
       });
     }
 
-    const settings = await database.upsertAgentReminderSettings(
+    const updatedAgent = await agentManager.updateReminderSettings(
       agentCode,
       parseInt(reminder_interval_minutes),
       reminders_enabled
     );
 
+    if (!updatedAgent) {
+      return res.status(404).json({
+        success: false,
+        error: `Agent ${agentCode} not found`
+      });
+    }
+
+    const responseData = {
+      agent_code: updatedAgent.agentCode,
+      agent_name: updatedAgent.agentName,
+      reminder_interval_minutes: updatedAgent.reminderSettings.intervalMinutes,
+      reminders_enabled: updatedAgent.reminderSettings.enabled
+    };
+
     res.json({
       success: true,
-      data: settings,
+      data: responseData,
       message: `Reminder settings updated for ${agentCode}`
     });
 

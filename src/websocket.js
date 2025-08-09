@@ -321,62 +321,35 @@ async checkAndSendReminders() {
     const now = new Date();
 
     for (const reminder of enabledReminders) {
-  const { agentCode, agentName, reminderSettings } = reminder;
-  const reminder_interval_minutes = reminderSettings.intervalMinutes;
-
+      const { agentCode, agentName, reminderSettings } = reminder;
+      const reminderIntervalMinutes = reminderSettings.intervalMinutes;
+      
       // Skip if agent is currently on call
-      if (activeCalls[agent_code]) {
+      if (activeCalls[agentCode]) {
         continue;
       }
 
       // Skip if agent is not online
-      const agentStatus = agentsStatus[agent_code];
+      const agentStatus = agentsStatus[agentCode];
       if (!agentStatus || agentStatus.status !== 'online') {
         continue;
       }
 
       // Check if agent has been idle long enough
-if (agentStatus.lastCallEnd) {
-  const lastCallEnd = new Date(agentStatus.lastCallEnd);
-  const minutesIdle = Math.floor((now - lastCallEnd) / (1000 * 60));
-  
-  // Check if we should send a reminder (at multiples of interval)
-  if (this.shouldSendReminder(agentCode, minutesIdle, reminder_interval_minutes)) {
-    await this.sendReminderToAgent(agentCode, agentName, minutesIdle, reminder_interval_minutes);
-  }
-}
+      if (agentStatus.lastCallEnd) {
+        const lastCallEnd = new Date(agentStatus.lastCallEnd);
+        const minutesIdle = Math.floor((now - lastCallEnd) / (1000 * 60));
+        
+        // Check if we should send a reminder (at multiples of interval)
+        if (this.shouldSendReminder(agentCode, minutesIdle, reminderIntervalMinutes)) {
+          await this.sendReminderToAgent(agentCode, agentName, minutesIdle, reminderIntervalMinutes);
+        }
+      }
     }
 
   } catch (error) {
     console.error('❌ Error checking reminders:', error.message);
   }
-}
-
-shouldSendReminder(agentCode, minutesIdle, intervalMinutes) {
-  // Only send reminder at exact multiples of the interval
-  if (minutesIdle < intervalMinutes || minutesIdle % intervalMinutes !== 0) {
-    return false;
-  }
-
-  // Check if we already sent a reminder for this exact minute
-  const lastReminderKey = `${agentCode}-${minutesIdle}`;
-  if (this.recentReminders && this.recentReminders.has(lastReminderKey)) {
-    return false;
-  }
-
-  // Mark this reminder as sent (prevent duplicates)
-  if (!this.recentReminders) {
-    this.recentReminders = new Set();
-  }
-  this.recentReminders.add(lastReminderKey);
-
-  // Clean up old entries (keep only last 100)
-  if (this.recentReminders.size > 100) {
-    const oldestEntries = Array.from(this.recentReminders).slice(0, 20);
-    oldestEntries.forEach(entry => this.recentReminders.delete(entry));
-  }
-
-  return true;
 }
 
 async sendReminderToAgent(agentCode, agentName, minutesIdle, intervalMinutes) {
