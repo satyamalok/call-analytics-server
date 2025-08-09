@@ -2,6 +2,7 @@ const express = require('express');
 const database = require('./database');
 const redis = require('./redis');
 const router = express.Router();
+const agentManager = require('./services/agentManager');
 
 // Health check endpoint
 router.get('/health', async (req, res) => {
@@ -357,8 +358,15 @@ router.post('/agents/:agentCode/remove', async (req, res) => {
       });
     }
 
-    // Remove agent from active status but keep call history
-    await database.updateAgentStatus(agentCode, 'removed');
+    // 🎯 NEW: Remove agent from JSON instead of database
+    const removed = await agentManager.removeAgent(agentCode);
+    
+    if (!removed) {
+      return res.status(404).json({
+        success: false,
+        error: `Agent ${agentCode} not found`
+      });
+    }
     
     // Remove from Redis active agents
     await redis.setAgentStatus(agentCode, 'removed');
@@ -366,7 +374,7 @@ router.post('/agents/:agentCode/remove', async (req, res) => {
     // Clear any active call data
     await redis.setCallEnd(agentCode);
 
-    console.log(`🗑️ Agent ${agentCode} removed from dashboard`);
+    console.log(`🗑️ Agent ${agentCode} removed from JSON and Redis`);
 
     res.json({
       success: true,
@@ -376,6 +384,26 @@ router.post('/agents/:agentCode/remove', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error removing agent:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// 🎯 NEW: Get all agents from JSON
+router.get('/agents/json', async (req, res) => {
+  try {
+    const agents = agentManager.getAllAgents();
+    
+    res.json({
+      success: true,
+      data: agents,
+      count: agents.length
+    });
+
+  } catch (error) {
+    console.error('❌ Error getting agents from JSON:', error.message);
     res.status(500).json({
       success: false,
       error: error.message
