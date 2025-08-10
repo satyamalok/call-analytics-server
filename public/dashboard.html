@@ -76,7 +76,7 @@
     <!-- Main Dashboard Grid -->
     <main class="dashboard-grid">
         <!-- Talk Time Card -->
-        <div class="dashboard-card" id="talkTimeCard">
+        <div class="dashboard-card full-width" id="talkTimeCard">
             <div class="card-header">
                 <h2>📊 Today's Talk Time</h2>
                 <div class="card-controls">
@@ -96,12 +96,13 @@
                                 <th>Agent Code</th>
                                 <th>Agent Name</th>
                                 <th>Talk Time</th>
+                                <th>Call Count</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="talkTimeTableBody">
                             <tr>
-                                <td colspan="4" class="loading">Loading agents...</td>
+                                <td colspan="5" class="loading">Loading agents...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -109,54 +110,53 @@
             </div>
         </div>
 
-        <!-- Currently On Call Card -->
-        <div class="dashboard-card" id="onCallCard">
+        <!-- Phone Number Search Card -->
+        <div class="dashboard-card full-width" id="searchCard">
             <div class="card-header">
-                <h2>📞 Currently On Call</h2>
-                <div class="card-badge" id="onCallCount">0</div>
+                <h2>🔍 Phone Number Search</h2>
             </div>
             <div class="card-content">
-                <div id="onCallList">
-                    <div class="loading">Loading...</div>
+                <div class="search-container">
+                    <input 
+                        type="text" 
+                        id="phoneSearchInput" 
+                        placeholder="Enter 10-digit phone number..." 
+                        maxlength="15"
+                        class="search-input"
+                    />
+                    <button id="phoneSearchBtn" class="search-btn">🔍 Search</button>
+                    <button id="clearSearchBtn" class="clear-btn">Clear</button>
+                </div>
+                <div id="searchResults" class="search-results">
+                    <div class="no-data">Enter a phone number to search call history</div>
                 </div>
             </div>
         </div>
 
-        <!-- Idle Time Card -->
-        <div class="dashboard-card" id="idleTimeCard">
-            <div class="card-header">
-                <h2>⏰ Time Since Last Call</h2>
-                <div class="card-badge" id="idleCount">0</div>
-            </div>
-            <div class="card-content">
-                <div id="idleTimeList">
-                    <div class="loading">Loading...</div>
+        <!-- Bottom Row: Two Columns -->
+        <div class="dashboard-row">
+            <!-- Currently On Call Card -->
+            <div class="dashboard-card half-width" id="onCallCard">
+                <div class="card-header">
+                    <h2>📞 Currently On Call</h2>
+                    <div class="card-badge" id="onCallCount">0</div>
+                </div>
+                <div class="card-content">
+                    <div id="onCallList">
+                        <div class="loading">Loading...</div>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Server Stats Card -->
-        <div class="dashboard-card" id="statsCard">
-            <div class="card-header">
-                <h2>📈 Server Statistics</h2>
-            </div>
-            <div class="card-content">
-                <div class="stats-grid">
-                    <div class="stat-item">
-                        <div class="stat-value" id="totalAgents">0</div>
-                        <div class="stat-label">Total Agents</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="onlineAgents">0</div>
-                        <div class="stat-label">Online Now</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="todayCalls">0</div>
-                        <div class="stat-label">Today's Calls</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="activeCalls">0</div>
-                        <div class="stat-label">Active Calls</div>
+            <!-- Idle Time Card -->
+            <div class="dashboard-card half-width" id="idleTimeCard">
+                <div class="card-header">
+                    <h2>⏰ Time Since Last Call</h2>
+                    <div class="card-badge" id="idleCount">0</div>
+                </div>
+                <div class="card-content">
+                    <div id="idleTimeList">
+                        <div class="loading">Loading...</div>
                     </div>
                 </div>
             </div>

@@ -29,6 +29,18 @@ CREATE TABLE IF NOT EXISTS calls (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Create idle_sessions table for tracking agent idle periods
+CREATE TABLE IF NOT EXISTS idle_sessions (
+    id SERIAL PRIMARY KEY,
+    agent_code VARCHAR(50) REFERENCES agents(agent_code) ON DELETE CASCADE,
+    agent_name VARCHAR(100),
+    start_time TIMESTAMP NOT NULL,
+    end_time TIMESTAMP NOT NULL,
+    idle_duration INTEGER NOT NULL CHECK (idle_duration >= 0), -- Duration in seconds
+    session_date DATE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Create agent reminder settings table
 CREATE TABLE IF NOT EXISTS agent_reminder_settings (
     agent_code VARCHAR(50) PRIMARY KEY REFERENCES agents(agent_code) ON DELETE CASCADE,
@@ -44,6 +56,9 @@ CREATE INDEX IF NOT EXISTS idx_calls_date ON calls(call_date);
 CREATE INDEX IF NOT EXISTS idx_calls_created_at ON calls(created_at);
 CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
 CREATE INDEX IF NOT EXISTS idx_agents_last_seen ON agents(last_seen);
+CREATE INDEX IF NOT EXISTS idx_idle_sessions_agent_date ON idle_sessions(agent_code, session_date);
+CREATE INDEX IF NOT EXISTS idx_idle_sessions_date ON idle_sessions(session_date);
+CREATE INDEX IF NOT EXISTS idx_idle_sessions_duration ON idle_sessions(idle_duration);
 
 -- Create function to automatically update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()

@@ -2,6 +2,7 @@ const express = require('express');
 const database = require('./database');
 const redis = require('./redis');
 const agentManager = require('./services/agentManager');
+const dailyTalkTimeManager = require('./services/dailyTalkTimeManager');
 const router = express.Router();
 
 
@@ -28,31 +29,12 @@ router.get('/health', async (req, res) => {
   }
 });
 
-// Get live dashboard data
-// Get live dashboard data (Hybrid: JSON + PostgreSQL)
+// Get live dashboard data (New: JSON-based talk time)
 router.get('/dashboard/live', async (req, res) => {
   try {
-    // HYBRID APPROACH: Get all agents from JSON and their talk time from PostgreSQL
-    // HYBRID APPROACH: Get all active agents from JSON (excluding removed ones)
-const allAgents = agentManager.getAllAgents();
-console.log(`📊 Dashboard: Found ${allAgents.length} active agents in JSON`);
-
-    // Get today's talk time from PostgreSQL for agents that have calls
-    const todayTalkTimeDB = await database.getTodayTalkTime();
-    
-    // Create a map for quick lookup
-    const talkTimeMap = {};
-    todayTalkTimeDB.forEach(agent => {
-      talkTimeMap[agent.agent_code] = parseInt(agent.today_talk_time) || 0;
-    });
-    
-    // Combine JSON agents with PostgreSQL talk time data
-    const agentsTalkTime = allAgents.map(agent => ({
-      agentCode: agent.agentCode,
-      agentName: agent.agentName,
-      todayTalkTime: talkTimeMap[agent.agentCode] || 0,
-      formattedTalkTime: formatDuration(talkTimeMap[agent.agentCode] || 0)
-    }));
+    // 🎯 NEW: Get today's talk time directly from JSON storage
+    const agentsTalkTime = dailyTalkTimeManager.getTodayTalkTime();
+    console.log(`📊 Dashboard: Found ${agentsTalkTime.length} agents with talk time data`);
     
     // Get active calls from Redis
     const activeCalls = await redis.getAllActiveCalls();
@@ -60,7 +42,7 @@ console.log(`📊 Dashboard: Found ${allAgents.length} active agents in JSON`);
     // Get all agents status from Redis
     const agentsStatus = await redis.getAllAgentsStatus();
 
-    // Format agents on call
+    // Format agents on call (simplified, no timers)
     const agentsOnCall = Object.entries(activeCalls).map(([agentCode, callData]) => ({
       agentCode,
       agentName: callData.agentName || 'Unknown',
@@ -73,7 +55,7 @@ console.log(`📊 Dashboard: Found ${allAgents.length} active agents in JSON`);
     const agentsIdleTime = [];
     const now = new Date();
 
-    for (const agent of allAgents) {
+    for (const agent of agentsTalkTime) {
       // Skip if agent is currently on call
       if (activeCalls[agent.agentCode]) continue;
 
@@ -112,7 +94,7 @@ console.log(`📊 Dashboard: Found ${allAgents.length} active agents in JSON`);
   }
 });
 
-// Get agent history
+// Get agent history (Now from JSON storage)
 router.get('/agent/:agentCode/history', async (req, res) => {
   try {
     const { agentCode } = req.params;
@@ -125,7 +107,8 @@ router.get('/agent/:agentCode/history', async (req, res) => {
       });
     }
 
-    const history = await database.getAgentHistory(agentCode, start_date, end_date);
+    // 🎯 NEW: Get history from JSON storage instead of PostgreSQL
+    const history = dailyTalkTimeManager.getAgentHistory(agentCode, start_date, end_date);
 
     res.json({
       success: true,
@@ -133,12 +116,7 @@ router.get('/agent/:agentCode/history', async (req, res) => {
         agentCode,
         startDate: start_date,
         endDate: end_date,
-        history: history.map(day => ({
-          date: day.call_date,
-          totalTalkTime: parseInt(day.total_talk_time) || 0,
-          formattedTalkTime: formatDuration(parseInt(day.total_talk_time) || 0),
-          totalCalls: parseInt(day.total_calls) || 0
-        }))
+        history: history
       }
     });
 
@@ -176,42 +154,101 @@ router.get('/agents', async (req, res) => {
   }
 });
 
-// Get server statistics
-router.get('/stats', async (req, res) => {
+// 🎯 NEW: Search calls by phone number
+router.get('/search/phone/:phoneNumber', async (req, res) => {
   try {
-    // Get total agents
-    const agentsQuery = await database.pool.query('SELECT COUNT(*) FROM agents');
-    const totalAgents = parseInt(agentsQuery.rows[0].count);
+    const { phoneNumber } = req.params;
+    const { limit = 50 } = req.query;
 
-    // Get today's total calls
-    const callsQuery = await database.pool.query(
-      'SELECT COUNT(*) FROM calls WHERE call_date = CURRENT_DATE'
-    );
-    const todayCalls = parseInt(callsQuery.rows[0].count);
+    if (!phoneNumber || phoneNumber.length < 3) {
+      return res.status(400).json({
+        success: false,
+        error: 'Phone number must be at least 3 digits'
+      });
+    }
 
-    // Get active calls count from Redis
-    const activeCalls = await redis.getAllActiveCalls();
-    const activeCallsCount = Object.keys(activeCalls).length;
-
-    // Get online agents count from Redis
-    const agentsStatus = await redis.getAllAgentsStatus();
-    const onlineAgentsCount = Object.values(agentsStatus).filter(
-      agent => agent.status === 'online' || agent.status === 'on_call'
-    ).length;
+    const calls = await database.searchCallsByPhoneNumber(phoneNumber, parseInt(limit));
 
     res.json({
       success: true,
       data: {
-        totalAgents,
-        onlineAgents: onlineAgentsCount,
-        activeCallsCount,
-        todayCalls,
-        serverTime: new Date().toISOString()
+        phoneNumber,
+        totalResults: calls.length,
+        calls: calls.map(call => ({
+          id: call.id,
+          agentCode: call.agent_code,
+          agentName: call.agent_name || 'Unknown',
+          phoneNumber: call.phone_number,
+          contactName: call.contact_name,
+          callType: call.call_type,
+          talkDuration: call.talk_duration,
+          formattedTalkDuration: formatDuration(call.talk_duration),
+          totalDuration: call.total_duration,
+          callDate: call.call_date,
+          startTime: call.start_time,
+          endTime: call.end_time,
+          createdAt: call.created_at
+        }))
       }
     });
 
   } catch (error) {
-    console.error('❌ Error getting server stats:', error.message);
+    console.error('❌ Error searching calls by phone number:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// 🎯 NEW: Get idle sessions for analytics
+router.get('/idle-sessions', async (req, res) => {
+  try {
+    const { agent_code, start_date, end_date, limit = 100 } = req.query;
+    
+    let query = `
+      SELECT * FROM idle_sessions 
+      WHERE 1=1
+    `;
+    const params = [];
+    let paramCount = 0;
+
+    if (agent_code) {
+      paramCount++;
+      query += ` AND agent_code = $${paramCount}`;
+      params.push(agent_code);
+    }
+
+    if (start_date) {
+      paramCount++;
+      query += ` AND session_date >= $${paramCount}`;
+      params.push(start_date);
+    }
+
+    if (end_date) {
+      paramCount++;
+      query += ` AND session_date <= $${paramCount}`;
+      params.push(end_date);
+    }
+
+    query += ` ORDER BY start_time DESC LIMIT $${paramCount + 1}`;
+    params.push(parseInt(limit));
+
+    const result = await database.pool.query(query, params);
+
+    res.json({
+      success: true,
+      data: {
+        totalResults: result.rows.length,
+        idleSessions: result.rows.map(session => ({
+          ...session,
+          formattedIdleDuration: formatDuration(session.idle_duration)
+        }))
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error getting idle sessions:', error.message);
     res.status(500).json({
       success: false,
       error: error.message

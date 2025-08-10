@@ -220,6 +220,68 @@ async upsertAgentReminderSettings(agentCode, intervalMinutes, enabled) {
     }
   }
 
+  // Phone number search method
+  async searchCallsByPhoneNumber(phoneNumber, limit = 50) {
+    const query = `
+      SELECT 
+        c.*,
+        a.agent_name
+      FROM calls c
+      LEFT JOIN agents a ON c.agent_code = a.agent_code
+      WHERE c.phone_number LIKE $1 
+        OR c.phone_number LIKE $2
+        OR c.phone_number LIKE $3
+      ORDER BY c.created_at DESC
+      LIMIT $4
+    `;
+    
+    // Clean the phone number and create search patterns
+    const cleanNumber = phoneNumber.replace(/\D/g, '');
+    const patterns = [
+      `%${cleanNumber}%`,
+      `%${cleanNumber.substring(cleanNumber.length - 10)}%`, // Last 10 digits
+      `%+91${cleanNumber}%` // Add country code
+    ];
+    
+    try {
+      const result = await this.pool.query(query, [...patterns, limit]);
+      return result.rows;
+    } catch (error) {
+      console.error('❌ Error searching calls by phone number:', error.message);
+      throw error;
+    }
+  }
+
+  // Insert idle session
+  async insertIdleSession(sessionData) {
+    const query = `
+      INSERT INTO idle_sessions (
+        agent_code, agent_name, start_time, end_time, 
+        idle_duration, session_date
+      )
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *
+    `;
+    
+    const values = [
+      sessionData.agentCode,
+      sessionData.agentName,
+      sessionData.startTime,
+      sessionData.endTime,
+      sessionData.idleDuration,
+      sessionData.sessionDate
+    ];
+    
+    try {
+      const result = await this.pool.query(query, values);
+      console.log(`💾 Idle session saved: ${sessionData.agentCode} - ${sessionData.idleDuration}s`);
+      return result.rows[0];
+    } catch (error) {
+      console.error('❌ Error inserting idle session:', error.message);
+      throw error;
+    }
+  }
+
   // Reminder settings methods
 async upsertAgentReminderSettings(agentCode, intervalMinutes, enabled) {
   const query = `

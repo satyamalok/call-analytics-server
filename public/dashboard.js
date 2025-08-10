@@ -239,11 +239,6 @@ function setupWebSocketEvents() {
     handleDashboardUpdate(data);
   });
 
-  socket.on('call_timer_update', (data) => {
-    debugLog(`Call timer update: ${data.agentCode} - ${data.formattedDuration}`);
-    updateCallTimer(data);
-  });
-
   socket.on('error', (error) => {
     debugLog('Server error:', error);
     showToast(`Server error: ${error.message || error}`, 'error');
@@ -263,16 +258,8 @@ async function loadDashboardData() {
   }
 }
 
-async function loadServerStats() {
-  try {
-    const result = await fetchAPI('/stats');
-    if (result.success) {
-      updateServerStats(result.data);
-    }
-  } catch (error) {
-    debugLog('Failed to load server stats:', error.message);
-  }
-}
+// 🎯 REMOVED: Server stats no longer needed
+// Dashboard now focuses on agent data only}
 
 // UI Update Functions
 function handleDashboardUpdate(data) {
@@ -300,12 +287,104 @@ function handleDashboardUpdate(data) {
   }
 }
 
+//new search funtion
+// 🎯 NEW: Phone number search functions
+async function searchPhoneNumber() {
+  const input = document.getElementById('phoneSearchInput');
+  const resultsContainer = document.getElementById('searchResults');
+  
+  if (!input || !resultsContainer) return;
+  
+  const phoneNumber = input.value.trim();
+  
+  if (phoneNumber.length < 3) {
+    showToast('Please enter at least 3 digits', 'warning');
+    return;
+  }
+  
+  try {
+    resultsContainer.innerHTML = '<div class="loading">🔍 Searching...</div>';
+    
+    const result = await fetchAPI(`/search/phone/${encodeURIComponent(phoneNumber)}`);
+    
+    if (result.success) {
+      displaySearchResults(result.data);
+      debugLog(`Search completed: ${result.data.totalResults} results for ${phoneNumber}`);
+    } else {
+      throw new Error(result.error || 'Search failed');
+    }
+    
+  } catch (error) {
+    debugLog('Search error:', error.message);
+    resultsContainer.innerHTML = `<div class="error">❌ Search failed: ${sanitizeHTML(error.message)}</div>`;
+    showToast(`Search failed: ${error.message}`, 'error');
+  }
+}
+
+function displaySearchResults(data) {
+  const resultsContainer = document.getElementById('searchResults');
+  
+  if (!resultsContainer) return;
+  
+  if (!data.calls || data.calls.length === 0) {
+    resultsContainer.innerHTML = `
+      <div class="no-data">
+        📭 No calls found for "${sanitizeHTML(data.phoneNumber)}"
+      </div>
+    `;
+    return;
+  }
+  
+  const resultItems = data.calls.map(call => {
+    const callTypeClass = `call-type-${call.callType}`;
+    const contactName = call.contactName ? sanitizeHTML(call.contactName) : 'Unknown';
+    
+    return `
+      <div class="search-result-item fade-in">
+        <div class="search-result-header">
+          <div class="search-result-phone">${formatPhoneNumber(call.phoneNumber)}</div>
+          <div class="search-result-type ${callTypeClass}">
+            ${getCallTypeIcon(call.callType)} ${call.callType.toUpperCase()}
+          </div>
+        </div>
+        <div class="search-result-details">
+          <div><strong>Contact:</strong> ${contactName}</div>
+          <div><strong>Agent:</strong> ${sanitizeHTML(call.agentCode)} - ${sanitizeHTML(call.agentName)}</div>
+          <div><strong>Date:</strong> ${call.callDate}</div>
+          <div><strong>Time:</strong> ${call.startTime} - ${call.endTime}</div>
+          <div><strong>Talk Duration:</strong> ${call.formattedTalkDuration}</div>
+          <div><strong>Total Duration:</strong> ${formatDuration(call.totalDuration)}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  resultsContainer.innerHTML = `
+    <div class="search-header">
+      <strong>📞 Found ${data.totalResults} call(s) for "${sanitizeHTML(data.phoneNumber)}"</strong>
+    </div>
+    ${resultItems}
+  `;
+}
+
+function clearSearch() {
+  const input = document.getElementById('phoneSearchInput');
+  const resultsContainer = document.getElementById('searchResults');
+  
+  if (input) input.value = '';
+  if (resultsContainer) {
+    resultsContainer.innerHTML = '<div class="no-data">Enter a phone number to search call history</div>';
+  }
+  
+  debugLog('Search cleared');
+}
+
 function updateTalkTimeTable(agents) {
   const tbody = document.getElementById('talkTimeTableBody');
   if (!tbody) return;
 
   if (!agents || agents.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="4" class="no-data">📭 No agents found</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="no-data">📭 No agents found</td></tr>';
     return;
   }
 
@@ -319,8 +398,8 @@ function updateTalkTimeTable(agents) {
         bValue = b.agentCode.toLowerCase();
         break;
       case 'talkTime':
-        aValue = a.todayTalkTime || 0;
-        bValue = b.todayTalkTime || 0;
+        aValue = a.totalTalkTime || 0;
+        bValue = b.totalTalkTime || 0;
         break;
       default:
         aValue = a.agentCode.toLowerCase();
@@ -339,14 +418,15 @@ function updateTalkTimeTable(agents) {
       <td><strong>${sanitizeHTML(agent.agentCode)}</strong></td>
       <td>${sanitizeHTML(agent.agentName)}</td>
       <td><span class="talk-time-value">${agent.formattedTalkTime}</span></td>
+      <td><span class="call-count">${agent.callCount || 0}</span></td>
       <td>
         <button 
-  class="remove-agent-btn" 
-  data-agent-code="${agent.agentCode}"
-  title="Remove agent from dashboard"
-  aria-label="Remove ${agent.agentCode}">
-  ❌
-</button>
+          class="remove-agent-btn" 
+          data-agent-code="${agent.agentCode}"
+          title="Remove agent from dashboard"
+          aria-label="Remove ${agent.agentCode}">
+          ❌
+        </button>
       </td>
     </tr>
   `).join('');
@@ -375,10 +455,11 @@ function updateOnCallList(agents) {
    return timeB - timeA;
  });
 
+ // 🎯 NEW: Simplified display without timers
  const items = sortedAgents.map(agent => {
    const phoneNumber = formatPhoneNumber(agent.phoneNumber);
-   const duration = agent.formattedDuration || formatDuration(agent.currentDuration || 0);
    const callTypeIcon = getCallTypeIcon(agent.callType);
+   const startTime = formatTime(agent.callStartTime);
    
    return `
      <div class="on-call-item fade-in" data-agent-code="${agent.agentCode}">
@@ -387,11 +468,9 @@ function updateOnCallList(agents) {
          <div class="phone-number">${phoneNumber}</div>
          <div class="call-type">${callTypeIcon} ${agent.callType}</div>
        </div>
-       <div class="call-duration">
-         <span class="time-badge on-call-badge" data-duration="${agent.currentDuration || 0}">
-           ${duration}
-         </span>
-         <div class="call-start-time">${formatTime(agent.callStartTime)}</div>
+       <div class="call-info">
+         <div class="call-start-time">Started: ${startTime}</div>
+         <span class="status-badge on-call">On Call</span>
        </div>
      </div>
    `;
@@ -400,73 +479,6 @@ function updateOnCallList(agents) {
  container.innerHTML = items;
 }
 
-function updateIdleTimeList(agents) {
- const container = document.getElementById('idleTimeList');
- const badge = document.getElementById('idleCount');
- 
- if (!container || !badge) return;
-
- badge.textContent = agents.length;
- badge.style.display = agents.length > 0 ? 'block' : 'none';
-
- if (!agents || agents.length === 0) {
-   container.innerHTML = '<div class="no-data">📞 All agents recently active</div>';
-   return;
- }
-
- // Sort by idle time (longest idle first)
- const sortedAgents = [...agents].sort((a, b) => {
-   return (b.minutesSinceLastCall || 0) - (a.minutesSinceLastCall || 0);
- });
-
- const items = sortedAgents.map(agent => {
-   const idleTime = formatIdleTime(agent.minutesSinceLastCall);
-   const urgencyClass = getUrgencyClass(agent.minutesSinceLastCall);
-   
-   return `
-     <div class="idle-item ${urgencyClass} fade-in" data-agent-code="${agent.agentCode}">
-       <div class="agent-info">
-         <div class="agent-name">${sanitizeHTML(agent.agentCode)} - ${sanitizeHTML(agent.agentName)}</div>
-         <div class="last-call-time">Last call: ${formatLastCallTime(agent.lastCallEnd)}</div>
-       </div>
-       <div class="idle-duration">
-         <span class="time-badge idle-badge ${urgencyClass}" data-minutes="${agent.minutesSinceLastCall}">
-           ${idleTime}
-         </span>
-         <div class="idle-status">${getIdleStatusText(agent.minutesSinceLastCall)}</div>
-       </div>
-     </div>
-   `;
- }).join('');
-
- container.innerHTML = items;
-}
-
-function updateServerStats(stats) {
- const elements = {
-   totalAgents: document.getElementById('totalAgents'),
-   onlineAgents: document.getElementById('onlineAgents'),
-   activeCalls: document.getElementById('activeCalls'),
-   todayCalls: document.getElementById('todayCalls')
- };
-
- if (elements.totalAgents) elements.totalAgents.textContent = stats.totalAgents || 0;
- if (elements.onlineAgents) elements.onlineAgents.textContent = stats.onlineAgents || 0;
- if (elements.activeCalls) elements.activeCalls.textContent = stats.activeCallsCount || 0;
- if (elements.todayCalls) elements.todayCalls.textContent = stats.todayCalls || 0;
-}
-
-function updateCallTimer(data) {
- const item = document.querySelector(`[data-agent-code="${data.agentCode}"]`);
- if (item) {
-   const badge = item.querySelector('.time-badge');
-   if (badge) {
-     badge.textContent = data.formattedDuration;
-     badge.setAttribute('data-duration', data.duration);
-     badge.classList.add('fade-in');
-   }
- }
-}
 
 function updateConnectionStatus(connected, status) {
  const statusDot = document.getElementById('statusDot');
@@ -566,7 +578,32 @@ function setupEventListeners() {
   // Debug console toggle
   const debugToggle = document.getElementById('debugToggle');
   const debugConsole = document.getElementById('debugConsole');
+  // 🎯 NEW: Phone search event listeners
+  const phoneSearchBtn = document.getElementById('phoneSearchBtn');
+  const phoneSearchInput = document.getElementById('phoneSearchInput');
+  const clearSearchBtn = document.getElementById('clearSearchBtn');
   
+  if (phoneSearchBtn) {
+    phoneSearchBtn.addEventListener('click', searchPhoneNumber);
+  }
+  
+  if (phoneSearchInput) {
+    phoneSearchInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        searchPhoneNumber();
+      }
+    });
+    
+    // Only allow numbers, +, spaces, hyphens, parentheses
+    phoneSearchInput.addEventListener('input', (e) => {
+      e.target.value = e.target.value.replace(/[^\d+\s\-()]/g, '');
+    });
+  }
+  
+  if (clearSearchBtn) {
+    clearSearchBtn.addEventListener('click', clearSearch);
+  }
+
   if (debugToggle && debugConsole) {
     debugToggle.addEventListener('click', () => {
       debugConsole.classList.toggle('show');
@@ -756,10 +793,9 @@ async function init() {
    
    // Load initial data
    await loadDashboardData();
-   await loadServerStats();
    
-   // Setup periodic refresh
-   setInterval(loadServerStats, 30000); // Refresh stats every 30 seconds
+   // 🎯 REMOVED: No more server stats polling
+   // Dashboard is now purely event-driven via WebSocket
    
    debugLog('✅ Dashboard initialized successfully');
    showToast('Dashboard loaded successfully', 'success');
