@@ -1034,13 +1034,16 @@ class IdleSessionsManager {
   
   setupEventListeners() {
     // Filter buttons
-    document.getElementById('applyFilters').addEventListener('click', () => {
-      this.applyFilters();
-    });
+    const applyBtn = document.getElementById('applyFilters');
+    const clearBtn = document.getElementById('clearFilters');
     
-    document.getElementById('clearFilters').addEventListener('click', () => {
-      this.clearFilters();
-    });
+    if (applyBtn) {
+      applyBtn.addEventListener('click', () => this.applyFilters());
+    }
+    
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => this.clearFilters());
+    }
     
     // Sorting
     document.querySelectorAll('[data-sort]').forEach(header => {
@@ -1050,23 +1053,31 @@ class IdleSessionsManager {
     });
     
     // Pagination
-    document.getElementById('prevPage').addEventListener('click', () => {
-      if (this.currentPage > 1) {
-        this.currentPage--;
-        this.loadIdleSessions();
-      }
-    });
+    const prevBtn = document.getElementById('prevPage');
+    const nextBtn = document.getElementById('nextPage');
     
-    document.getElementById('nextPage').addEventListener('click', () => {
-      if (this.currentPage < this.totalPages) {
-        this.currentPage++;
-        this.loadIdleSessions();
-      }
-    });
+    if (prevBtn) {
+      prevBtn.addEventListener('click', () => {
+        if (this.currentPage > 1) {
+          this.currentPage--;
+          this.loadIdleSessions();
+        }
+      });
+    }
+    
+    if (nextBtn) {
+      nextBtn.addEventListener('click', () => {
+        if (this.currentPage < this.totalPages) {
+          this.currentPage++;
+          this.loadIdleSessions();
+        }
+      });
+    }
   }
   
-  async loadAgentOptions() {
+  loadAgentOptions() {
     const agentSelect = document.getElementById('agentSelect');
+    if (!agentSelect) return;
     
     // Add Agent1 to Agent25 options
     for (let i = 1; i <= 25; i++) {
@@ -1078,22 +1089,36 @@ class IdleSessionsManager {
   }
   
   setDefaultDate() {
+    const dateSelect = document.getElementById('dateSelect');
+    if (!dateSelect) return;
+    
     const today = new Date().toISOString().split('T')[0];
-    document.getElementById('dateSelect').value = today;
+    dateSelect.value = today;
     this.currentFilters.date = today;
   }
   
   applyFilters() {
-    this.currentFilters.agentCode = document.getElementById('agentSelect').value;
-    this.currentFilters.date = document.getElementById('dateSelect').value;
+    const agentSelect = document.getElementById('agentSelect');
+    const dateSelect = document.getElementById('dateSelect');
+    
+    if (agentSelect) this.currentFilters.agentCode = agentSelect.value;
+    if (dateSelect) this.currentFilters.date = dateSelect.value;
+    
     this.currentPage = 1; // Reset to first page
     this.loadIdleSessions();
   }
   
   clearFilters() {
-    document.getElementById('agentSelect').value = '';
+    const agentSelect = document.getElementById('agentSelect');
+    const dateSelect = document.getElementById('dateSelect');
+    
+    if (agentSelect) agentSelect.value = '';
     this.setDefaultDate();
-    this.currentFilters = { agentCode: '', date: document.getElementById('dateSelect').value };
+    
+    this.currentFilters = { 
+      agentCode: '', 
+      date: dateSelect ? dateSelect.value : ''
+    };
     this.currentPage = 1;
     this.loadIdleSessions();
   }
@@ -1151,7 +1176,8 @@ class IdleSessionsManager {
       
       if (data.success) {
         this.renderIdleSessions(data.data.idleSessions);
-        this.updatePagination(data.data.totalResults);
+        this.updatePagination(data.data.totalRecords);
+        this.updateCount(data.data.totalRecords);
       } else {
         this.showError('Failed to load idle sessions');
       }
@@ -1162,31 +1188,47 @@ class IdleSessionsManager {
   }
   
   showLoading() {
-    document.getElementById('idleSessionsLoading').classList.remove('hidden');
-    document.getElementById('idleSessionsEmpty').classList.add('hidden');
-    document.getElementById('idleSessionsTable').classList.add('hidden');
+    const loading = document.getElementById('idleSessionsLoading');
+    const empty = document.getElementById('idleSessionsEmpty');
+    const table = document.getElementById('idleSessionsTable');
+    
+    if (loading) loading.classList.remove('hidden');
+    if (empty) empty.classList.add('hidden');
+    if (table) table.classList.add('hidden');
   }
   
   showError(message) {
-    document.getElementById('idleSessionsLoading').classList.add('hidden');
-    document.getElementById('idleSessionsEmpty').classList.remove('hidden');
-    document.getElementById('idleSessionsTable').classList.add('hidden');
-    document.getElementById('idleSessionsEmpty').innerHTML = `<p class="text-red-500">${message}</p>`;
+    const loading = document.getElementById('idleSessionsLoading');
+    const empty = document.getElementById('idleSessionsEmpty');
+    const table = document.getElementById('idleSessionsTable');
+    
+    if (loading) loading.classList.add('hidden');
+    if (empty) {
+      empty.classList.remove('hidden');
+      empty.innerHTML = `<p style="color: var(--error-color);">${message}</p>`;
+    }
+    if (table) table.classList.add('hidden');
   }
   
   renderIdleSessions(sessions) {
-    document.getElementById('idleSessionsLoading').classList.add('hidden');
+    const loading = document.getElementById('idleSessionsLoading');
+    const empty = document.getElementById('idleSessionsEmpty');
+    const table = document.getElementById('idleSessionsTable');
+    
+    if (loading) loading.classList.add('hidden');
     
     if (sessions.length === 0) {
-      document.getElementById('idleSessionsEmpty').classList.remove('hidden');
-      document.getElementById('idleSessionsTable').classList.add('hidden');
+      if (empty) empty.classList.remove('hidden');
+      if (table) table.classList.add('hidden');
       return;
     }
     
-    document.getElementById('idleSessionsEmpty').classList.add('hidden');
-    document.getElementById('idleSessionsTable').classList.remove('hidden');
+    if (empty) empty.classList.add('hidden');
+    if (table) table.classList.remove('hidden');
     
     const tbody = document.getElementById('idleSessionsTableBody');
+    if (!tbody) return;
+    
     tbody.innerHTML = '';
     
     sessions.forEach(session => {
@@ -1197,7 +1239,6 @@ class IdleSessionsManager {
   
   createSessionRow(session) {
     const row = document.createElement('tr');
-    row.className = 'table-row-hover';
     
     const startTime = new Date(session.start_time).toLocaleTimeString('en-US', { 
       hour: 'numeric', 
@@ -1215,11 +1256,11 @@ class IdleSessionsManager {
     const durationClass = this.getDurationClass(session.idle_duration);
     
     row.innerHTML = `
-      <td class="px-4 py-3 text-sm font-medium text-gray-900">${session.agent_code}</td>
-      <td class="px-4 py-3 text-sm text-gray-700">${session.agent_name || 'Unknown'}</td>
-      <td class="px-4 py-3 text-sm text-gray-700">${startTime}</td>
-      <td class="px-4 py-3 text-sm text-gray-700">${endTime}</td>
-      <td class="px-4 py-3 text-sm">
+      <td style="font-weight: 600;">${session.agent_code}</td>
+      <td>${session.agent_name || 'Unknown'}</td>
+      <td>${startTime}</td>
+      <td>${endTime}</td>
+      <td>
         <span class="${durationClass}">${duration}</span>
       </td>
     `;
@@ -1257,29 +1298,46 @@ class IdleSessionsManager {
     this.totalRecords = totalRecords;
     this.totalPages = Math.ceil(totalRecords / this.recordsPerPage);
     
+    const recordsInfo = document.getElementById('recordsInfo');
+    const pageInfo = document.getElementById('pageInfo');
+    const prevBtn = document.getElementById('prevPage');
+    const nextBtn = document.getElementById('nextPage');
+    
     // Update records info
-    const start = (this.currentPage - 1) * this.recordsPerPage + 1;
-    const end = Math.min(this.currentPage * this.recordsPerPage, totalRecords);
-    document.getElementById('recordsInfo').textContent = 
-      totalRecords > 0 ? `${start}-${end} of ${totalRecords}` : '0';
+    if (recordsInfo) {
+      const start = (this.currentPage - 1) * this.recordsPerPage + 1;
+      const end = Math.min(this.currentPage * this.recordsPerPage, totalRecords);
+      recordsInfo.textContent = 
+        totalRecords > 0 ? `${start}-${end} of ${totalRecords}` : '0';
+    }
     
     // Update page info
-    document.getElementById('pageInfo').textContent = 
-      `Page ${this.currentPage} of ${this.totalPages || 1}`;
+    if (pageInfo) {
+      pageInfo.textContent = `Page ${this.currentPage} of ${this.totalPages || 1}`;
+    }
     
     // Update buttons
-    document.getElementById('prevPage').disabled = this.currentPage <= 1;
-    document.getElementById('nextPage').disabled = this.currentPage >= this.totalPages;
+    if (prevBtn) prevBtn.disabled = this.currentPage <= 1;
+    if (nextBtn) nextBtn.disabled = this.currentPage >= this.totalPages;
+  }
+  
+  updateCount(totalRecords) {
+    const countBadge = document.getElementById('idleSessionsCount');
+    if (countBadge) {
+      countBadge.textContent = `${totalRecords} sessions`;
+    }
   }
 }
 
-// Initialize Idle Sessions Manager when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-  // Add a small delay to ensure other components are loaded
-  setTimeout(() => {
-    window.idleSessionsManager = new IdleSessionsManager();
-  }, 1000);
-});
+// Initialize Idle Sessions Manager when dashboard is loaded
+if (typeof window !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', () => {
+    // Add a small delay to ensure other components are loaded
+    setTimeout(() => {
+      window.idleSessionsManager = new IdleSessionsManager();
+    }, 2000);
+  });
+}
 
 function cleanup() {
  debugLog('🧹 Cleaning up dashboard...');
