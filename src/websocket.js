@@ -205,6 +205,7 @@ class WebSocketManager {
 
     // 🎯 NEW: Start tracking idle time
     this.agentIdleStartTimes.set(agentCode, new Date());
+    console.log(`⏰ Started idle tracking for ${agentCode} at ${new Date().toISOString()}`);
 
     // Broadcast updated dashboard data
     await this.broadcastDashboardUpdate();
@@ -213,6 +214,17 @@ class WebSocketManager {
     console.error('❌ Error handling call ended:', error.message);
     socket.emit('error', { message: 'Failed to record call end' });
   }
+}
+
+// 🎯 DEBUG: Method to check current idle tracking status
+getIdleTrackingStatus() {
+  console.log('🔍 Current idle tracking status:');
+  for (const [agentCode, startTime] of this.agentIdleStartTimes.entries()) {
+    const now = new Date();
+    const minutesIdle = Math.floor((now - startTime) / (1000 * 60));
+    console.log(`   ${agentCode}: Idle for ${minutesIdle} minutes (started: ${startTime.toISOString()})`);
+  }
+  console.log(`   Total agents being tracked: ${this.agentIdleStartTimes.size}`);
 }
 
   // NEW: Clean up timers on disconnect
@@ -252,12 +264,14 @@ agentManager.updateAgentStatus(socket.agentCode, 'offline').catch(console.error)
   try {
     // 🎯 NEW: Get today's talk time from JSON storage
     const todayTalkTime = dailyTalkTimeManager.getTodayTalkTime();
+    console.log(`📊 Dashboard: Talk time agents: ${todayTalkTime.length}`);
     
     // Get all agents status from Redis
     const agentsStatus = await redis.getAllAgentsStatus();
     const activeCalls = await redis.getAllActiveCalls();
+    console.log(`📊 Dashboard: Active calls: ${Object.keys(activeCalls).length}`);
 
-    // Format agents on call (simple list, no timers)
+    // Format agents on call (simplified, no timers)
     const agentsOnCall = Object.entries(activeCalls).map(([agentCode, callData]) => ({
       agentCode,
       agentName: callData.agentName || 'Unknown',
@@ -272,12 +286,17 @@ agentManager.updateAgentStatus(socket.agentCode, 'offline').catch(console.error)
 
     for (const agent of todayTalkTime) {
       // Skip if agent is currently on call
-      if (activeCalls[agent.agentCode]) continue;
+      if (activeCalls[agent.agentCode]) {
+        console.log(`📊 ${agent.agentCode} is on call, skipping idle calculation`);
+        continue;
+      }
 
       const agentStatus = agentsStatus[agent.agentCode];
       if (agentStatus && agentStatus.status === 'online' && agentStatus.lastCallEnd) {
         const lastCallEnd = new Date(agentStatus.lastCallEnd);
         const minutesSinceLastCall = Math.floor((now - lastCallEnd) / (1000 * 60));
+        
+        console.log(`📊 ${agent.agentCode}: Last call ${minutesSinceLastCall} minutes ago`);
         
         if (minutesSinceLastCall >= 0) {
           agentsIdleTime.push({
@@ -287,8 +306,12 @@ agentManager.updateAgentStatus(socket.agentCode, 'offline').catch(console.error)
             lastCallEnd: agentStatus.lastCallEnd
           });
         }
+      } else {
+        console.log(`📊 ${agent.agentCode}: No idle data available (status: ${agentStatus?.status}, lastCallEnd: ${agentStatus?.lastCallEnd})`);
       }
     }
+
+    console.log(`📊 Dashboard: Sending ${agentsIdleTime.length} idle agents`);
 
     return {
       agentsTalkTime: todayTalkTime.sort((a, b) => a.agentCode.localeCompare(b.agentCode)),

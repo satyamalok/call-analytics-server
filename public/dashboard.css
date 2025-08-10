@@ -528,6 +528,61 @@ body {
   background: var(--warning-color);
 }
 
+/* Idle Time Urgency Classes */
+.idle-item.normal {
+  border-left-color: var(--success-color);
+  background: #f0f8f0;
+}
+
+.idle-item.caution {
+  border-left-color: var(--warning-color);
+  background: #fffbf0;
+}
+
+.idle-item.warning {
+  border-left-color: #ff7043;
+  background: #fff3e0;
+}
+
+.idle-item.urgent {
+  border-left-color: var(--error-color);
+  background: #ffebee;
+  animation: pulse 3s infinite;
+}
+
+/* Idle Badge Urgency Colors */
+.idle-badge.normal {
+  background: var(--success-color);
+}
+
+.idle-badge.caution {
+  background: var(--warning-color);
+}
+
+.idle-badge.warning {
+  background: #ff7043;
+}
+
+.idle-badge.urgent {
+  background: var(--error-color);
+  animation: pulse 2s infinite;
+}
+
+/* Idle Duration Styles */
+.idle-duration {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.idle-status {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
 /* Stats Grid */
 .stats-grid {
   display: grid;

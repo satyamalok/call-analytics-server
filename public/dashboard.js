@@ -479,6 +479,90 @@ function updateOnCallList(agents) {
  container.innerHTML = items;
 }
 
+function updateIdleTimeList(agents) {
+ const container = document.getElementById('idleTimeList');
+ const badge = document.getElementById('idleCount');
+ 
+ if (!container || !badge) return;
+
+ badge.textContent = agents.length;
+ badge.style.display = agents.length > 0 ? 'block' : 'none';
+
+ if (!agents || agents.length === 0) {
+   container.innerHTML = '<div class="no-data">📞 All agents recently active</div>';
+   return;
+ }
+
+ // Sort by idle time (longest idle first)
+ const sortedAgents = [...agents].sort((a, b) => {
+   return (b.minutesSinceLastCall || 0) - (a.minutesSinceLastCall || 0);
+ });
+
+ const items = sortedAgents.map(agent => {
+   const idleTime = formatIdleTime(agent.minutesSinceLastCall);
+   const urgencyClass = getUrgencyClass(agent.minutesSinceLastCall);
+   
+   return `
+     <div class="idle-item ${urgencyClass} fade-in" data-agent-code="${agent.agentCode}">
+       <div class="agent-info">
+         <div class="agent-name">${sanitizeHTML(agent.agentCode)} - ${sanitizeHTML(agent.agentName)}</div>
+         <div class="last-call-time">Last call: ${formatLastCallTime(agent.lastCallEnd)}</div>
+       </div>
+       <div class="idle-duration">
+         <span class="time-badge idle-badge ${urgencyClass}" data-minutes="${agent.minutesSinceLastCall}">
+           ${idleTime}
+         </span>
+         <div class="idle-status">${getIdleStatusText(agent.minutesSinceLastCall)}</div>
+       </div>
+     </div>
+   `;
+ }).join('');
+
+ container.innerHTML = items;
+}
+
+function formatIdleTime(minutes) {
+ if (!minutes || minutes < 0) return '0m';
+ 
+ if (minutes < 60) {
+   return `${minutes}m`;
+ } else {
+   const hours = Math.floor(minutes / 60);
+   const remainingMinutes = minutes % 60;
+   return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+ }
+}
+
+function formatLastCallTime(lastCallEnd) {
+ if (!lastCallEnd) return 'Unknown';
+ 
+ const endTime = new Date(lastCallEnd);
+ const now = new Date();
+ const diffHours = Math.floor((now - endTime) / (1000 * 60 * 60));
+ 
+ if (diffHours < 1) {
+   return formatTime(lastCallEnd);
+ } else if (diffHours < 24) {
+   return `${diffHours}h ago`;
+ } else {
+   return endTime.toLocaleDateString();
+ }
+}
+
+function getUrgencyClass(minutes) {
+ if (minutes >= 60) return 'urgent';
+ if (minutes >= 30) return 'warning';
+ if (minutes >= 15) return 'caution';
+ return 'normal';
+}
+
+function getIdleStatusText(minutes) {
+ if (minutes >= 120) return 'Very Long Idle';
+ if (minutes >= 60) return 'Long Idle';
+ if (minutes >= 30) return 'Extended Idle';
+ if (minutes >= 15) return 'Idle';
+ return 'Recently Active';
+}
 
 function updateConnectionStatus(connected, status) {
  const statusDot = document.getElementById('statusDot');
