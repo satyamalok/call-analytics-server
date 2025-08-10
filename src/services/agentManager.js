@@ -123,25 +123,31 @@ class AgentManager {
   }
 
   // Remove agent completely
-  async removeAgent(agentCode) {
-    try {
-      if (!this.agents[agentCode]) {
-        console.log(`⚠️ Agent ${agentCode} not found for removal`);
-        return false;
-      }
-
-      const agentName = this.agents[agentCode].agentName;
-      delete this.agents[agentCode];
-      
-      await this.saveToFile();
-      console.log(`🗑️ Removed agent: ${agentCode} (${agentName}) from JSON`);
-      
-      return true;
-    } catch (error) {
-      console.error('❌ Error removing agent:', error.message);
-      throw error;
+  // Remove agent completely from JSON (but keep PostgreSQL call history)
+async removeAgent(agentCode) {
+  try {
+    if (!this.agents[agentCode]) {
+      console.log(`⚠️ Agent ${agentCode} not found for removal`);
+      return false;
     }
+
+    const agentName = this.agents[agentCode].agentName;
+    
+    // Remove from JSON completely
+    delete this.agents[agentCode];
+    
+    await this.saveToFile();
+    console.log(`🗑️ Completely removed agent: ${agentCode} (${agentName}) from JSON`);
+    
+    // Note: PostgreSQL call history is preserved for analytics
+    console.log(`📊 Call history for ${agentCode} preserved in PostgreSQL`);
+    
+    return true;
+  } catch (error) {
+    console.error('❌ Error removing agent:', error.message);
+    throw error;
   }
+}
 
   // Get single agent
   getAgent(agentCode) {

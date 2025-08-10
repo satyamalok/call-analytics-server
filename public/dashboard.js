@@ -873,11 +873,16 @@ async function saveAllAgentSettings() {
     const result = await response.json();
     
     if (result.success) {
-      showToast(`Settings saved for ${settings.length} agents`, 'success');
-      debugLog('Settings saved successfully', result);
-    } else {
-      throw new Error(result.error || 'Failed to save settings');
-    }
+  showToast(`Settings saved for ${settings.length} agents`, 'success');
+  debugLog('Settings saved successfully', result);
+  
+  // Reload settings to show updated values
+  setTimeout(() => {
+    loadAgentSettings();
+  }, 500);
+} else {
+  throw new Error(result.error || 'Failed to save settings');
+}
 
   } catch (error) {
     debugLog('Failed to save settings:', error.message);

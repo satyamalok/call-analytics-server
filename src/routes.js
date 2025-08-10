@@ -33,8 +33,10 @@ router.get('/health', async (req, res) => {
 router.get('/dashboard/live', async (req, res) => {
   try {
     // HYBRID APPROACH: Get all agents from JSON and their talk time from PostgreSQL
-    const allAgents = agentManager.getAllAgents();
-    
+    // HYBRID APPROACH: Get all active agents from JSON (excluding removed ones)
+const allAgents = agentManager.getAllAgents();
+console.log(`📊 Dashboard: Found ${allAgents.length} active agents in JSON`);
+
     // Get today's talk time from PostgreSQL for agents that have calls
     const todayTalkTimeDB = await database.getTodayTalkTime();
     
@@ -235,15 +237,21 @@ function formatDuration(seconds) {
 // Agent reminder settings routes
 router.get('/reminder-settings', async (req, res) => {
   try {
-    const settings = agentManager.getAllAgents().map(agent => ({
-      agent_code: agent.agentCode,
-      agent_name: agent.agentName,
-      reminder_interval_minutes: agent.reminderSettings?.intervalMinutes || 5,
-      reminders_enabled: agent.reminderSettings?.enabled !== false,
-      agent_status: agent.status || 'offline'
-    }));
+    const allAgents = agentManager.getAllAgents();
+    const settings = allAgents.map(agent => {
+      const reminderSettings = agent.reminderSettings || { intervalMinutes: 5, enabled: true };
+      
+      return {
+        agent_code: agent.agentCode,
+        agent_name: agent.agentName,
+        reminder_interval_minutes: reminderSettings.intervalMinutes,
+        reminders_enabled: reminderSettings.enabled,
+        agent_status: agent.status || 'offline'
+      };
+    });
     
     console.log(`📊 JSON: Loaded ${settings.length} agent reminder settings`);
+    console.log(`📊 Settings details:`, settings.map(s => `${s.agent_code}:${s.reminder_interval_minutes}min`).join(', '));
     
     res.json({
       success: true,
@@ -349,6 +357,7 @@ router.post('/reminder-settings/:agentCode', async (req, res) => {
 });
 
 // Bulk update reminder settings
+// Bulk update reminder settings (JSON-based)
 router.post('/reminder-settings-bulk', async (req, res) => {
   try {
     const { settings } = req.body;
@@ -360,27 +369,60 @@ router.post('/reminder-settings-bulk', async (req, res) => {
       });
     }
 
+    console.log(`📊 Bulk update request for ${settings.length} agents`);
     const results = [];
 
     for (const setting of settings) {
       const { agentCode, reminder_interval_minutes, reminders_enabled } = setting;
       
+      // Validation
+      const intervalInt = parseInt(reminder_interval_minutes);
+      if (isNaN(intervalInt) || intervalInt < 1 || intervalInt > 60) {
+        results.push({ 
+          success: false, 
+          agentCode, 
+          error: `Invalid interval: ${reminder_interval_minutes}. Must be 1-60 minutes.` 
+        });
+        continue;
+      }
+
+      if (typeof reminders_enabled !== 'boolean') {
+        results.push({ 
+          success: false, 
+          agentCode, 
+          error: 'reminders_enabled must be boolean' 
+        });
+        continue;
+      }
+      
       try {
-        const result = await database.upsertAgentReminderSettings(
+        console.log(`📊 Updating ${agentCode}: ${intervalInt} minutes, enabled: ${reminders_enabled}`);
+        
+        const result = await agentManager.updateReminderSettings(
           agentCode,
-          parseInt(reminder_interval_minutes),
+          intervalInt,
           reminders_enabled
         );
-        results.push({ success: true, agentCode, data: result });
+        
+        if (result) {
+          results.push({ success: true, agentCode, data: result });
+          console.log(`✅ Updated ${agentCode} settings successfully`);
+        } else {
+          results.push({ success: false, agentCode, error: 'Agent not found' });
+        }
       } catch (error) {
         results.push({ success: false, agentCode, error: error.message });
+        console.error(`❌ Error updating ${agentCode}:`, error.message);
       }
     }
+
+    const successCount = results.filter(r => r.success).length;
+    console.log(`📊 Bulk update completed: ${successCount}/${results.length} successful`);
 
     res.json({
       success: true,
       data: results,
-      message: `Bulk update completed for ${results.length} agents`
+      message: `Bulk update completed: ${successCount}/${results.length} agents updated`
     });
 
   } catch (error) {
