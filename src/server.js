@@ -10,6 +10,7 @@ const database = require('./database');
 const redis = require('./redis');
 const routes = require('./routes');
 const WebSocketManager = require('./websocket');
+const dailyTalkTimeManager = require('./services/dailyTalkTimeManager');
 
 class CallAnalyticsServer {
   constructor() {
@@ -151,16 +152,20 @@ class CallAnalyticsServer {
     });
   }
 
- async start() {
+async start() {
   try {
     // Wait for database and redis to be ready
     console.log('🔄 Waiting for database and redis connections...');
     await this.waitForConnections();
 
+    // Initialize daily talk time manager
+    console.log('🔄 Initializing daily talk time manager...');
+    await dailyTalkTimeManager.init();
+
     // Sync all agents from JSON to PostgreSQL on startup
     console.log('🔄 Syncing agents from JSON to PostgreSQL...');
     const agentManager = require('./services/agentManager');
-    await agentManager.syncAllAgentsToPostgreSQL();
+    await agentManager.syncAllAgentsToPostGreSQL();
 
     // Start the server
     this.server.listen(config.server.port, '0.0.0.0', () => {
