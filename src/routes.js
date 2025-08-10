@@ -29,10 +29,28 @@ router.get('/health', async (req, res) => {
 });
 
 // Get live dashboard data
+// Get live dashboard data (Hybrid: JSON + PostgreSQL)
 router.get('/dashboard/live', async (req, res) => {
   try {
-    // Get today's talk time from database
-    const todayTalkTime = await database.getTodayTalkTime();
+    // HYBRID APPROACH: Get all agents from JSON and their talk time from PostgreSQL
+    const allAgents = agentManager.getAllAgents();
+    
+    // Get today's talk time from PostgreSQL for agents that have calls
+    const todayTalkTimeDB = await database.getTodayTalkTime();
+    
+    // Create a map for quick lookup
+    const talkTimeMap = {};
+    todayTalkTimeDB.forEach(agent => {
+      talkTimeMap[agent.agent_code] = parseInt(agent.today_talk_time) || 0;
+    });
+    
+    // Combine JSON agents with PostgreSQL talk time data
+    const agentsTalkTime = allAgents.map(agent => ({
+      agentCode: agent.agentCode,
+      agentName: agent.agentName,
+      todayTalkTime: talkTimeMap[agent.agentCode] || 0,
+      formattedTalkTime: formatDuration(talkTimeMap[agent.agentCode] || 0)
+    }));
     
     // Get active calls from Redis
     const activeCalls = await redis.getAllActiveCalls();
@@ -49,22 +67,23 @@ router.get('/dashboard/live', async (req, res) => {
       callType: callData.callType
     }));
 
-    // Calculate idle times
+    // Calculate idle times for agents not on call
     const agentsIdleTime = [];
     const now = new Date();
 
-    for (const agent of todayTalkTime) {
-      if (activeCalls[agent.agent_code]) continue;
+    for (const agent of allAgents) {
+      // Skip if agent is currently on call
+      if (activeCalls[agent.agentCode]) continue;
 
-      const agentStatus = agentsStatus[agent.agent_code];
+      const agentStatus = agentsStatus[agent.agentCode];
       if (agentStatus && agentStatus.status === 'online' && agentStatus.lastCallEnd) {
         const lastCallEnd = new Date(agentStatus.lastCallEnd);
         const minutesSinceLastCall = Math.floor((now - lastCallEnd) / (1000 * 60));
         
         if (minutesSinceLastCall >= 0) {
           agentsIdleTime.push({
-            agentCode: agent.agent_code,
-            agentName: agent.agent_name,
+            agentCode: agent.agentCode,
+            agentName: agent.agentName,
             minutesSinceLastCall,
             lastCallEnd: agentStatus.lastCallEnd
           });
@@ -75,12 +94,7 @@ router.get('/dashboard/live', async (req, res) => {
     res.json({
       success: true,
       data: {
-        agentsTalkTime: todayTalkTime.map(agent => ({
-          agentCode: agent.agent_code,
-          agentName: agent.agent_name,
-          todayTalkTime: parseInt(agent.today_talk_time) || 0,
-          formattedTalkTime: formatDuration(parseInt(agent.today_talk_time) || 0)
-        })),
+        agentsTalkTime: agentsTalkTime.sort((a, b) => a.agentCode.localeCompare(b.agentCode)),
         agentsOnCall,
         agentsIdleTime: agentsIdleTime.sort((a, b) => b.minutesSinceLastCall - a.minutesSinceLastCall),
         lastUpdated: new Date().toISOString()

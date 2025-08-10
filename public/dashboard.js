@@ -797,6 +797,12 @@ function updateSettingsTable(settings) {
     const statusClass = `status-${setting.agent_status || 'offline'}`;
     const statusText = (setting.agent_status || 'offline').replace('_', ' ').toUpperCase();
     
+    // Ensure we get the correct interval value
+    const intervalValue = setting.reminder_interval_minutes || 5;
+    const reminderEnabled = setting.reminders_enabled !== false; // Default to true
+    
+    debugLog(`Loading setting for ${setting.agent_code}: interval=${intervalValue}, enabled=${reminderEnabled}`);
+    
     return `
       <tr data-agent-code="${setting.agent_code}">
         <td><strong>${sanitizeHTML(setting.agent_code)}</strong></td>
@@ -808,8 +814,9 @@ function updateSettingsTable(settings) {
             class="interval-input" 
             min="1" 
             max="60" 
-            value="${setting.reminder_interval_minutes || 5}"
+            value="${intervalValue}"
             data-agent-code="${setting.agent_code}"
+            data-original-value="${intervalValue}"
           />
         </td>
         <td>
@@ -818,7 +825,7 @@ function updateSettingsTable(settings) {
               type="checkbox" 
               class="reminder-checkbox"
               data-agent-code="${setting.agent_code}"
-              ${setting.reminders_enabled ? 'checked' : ''}
+              ${reminderEnabled ? 'checked' : ''}
             />
             <span class="toggle-slider"></span>
           </label>
@@ -828,6 +835,7 @@ function updateSettingsTable(settings) {
   }).join('');
 
   tbody.innerHTML = rows;
+  debugLog(`Settings table updated with ${settings.length} agents`);
 }
 
 async function saveAllAgentSettings() {

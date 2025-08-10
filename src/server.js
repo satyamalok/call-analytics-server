@@ -151,14 +151,19 @@ class CallAnalyticsServer {
     });
   }
 
-  async start() {
-    try {
-      // Wait for database and redis to be ready
-      console.log('🔄 Waiting for database and redis connections...');
-      await this.waitForConnections();
+ async start() {
+  try {
+    // Wait for database and redis to be ready
+    console.log('🔄 Waiting for database and redis connections...');
+    await this.waitForConnections();
 
-      // Start the server
-      this.server.listen(config.server.port, '0.0.0.0', () => {
+    // Sync all agents from JSON to PostgreSQL on startup
+    console.log('🔄 Syncing agents from JSON to PostgreSQL...');
+    const agentManager = require('./services/agentManager');
+    await agentManager.syncAllAgentsToPostgreSQL();
+
+    // Start the server
+    this.server.listen(config.server.port, '0.0.0.0', () => {
         console.log('🚀 Call Analytics Server Started');
         console.log(`📡 Server: http://0.0.0.0:${config.server.port}`);
         console.log(`🔌 WebSocket: ws://0.0.0.0:${config.server.port}`);

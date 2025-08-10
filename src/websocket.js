@@ -50,24 +50,24 @@ class WebSocketManager {
   }
 
   async handleAgentOnline(socket, data) {
-    try {
-      const { agentCode, agentName } = data;
-      
-      if (!agentCode || !agentName) {
-        socket.emit('error', { message: 'Agent code and name required' });
-        return;
-      }
+  try {
+    const { agentCode, agentName } = data;
+    
+    if (!agentCode || !agentName) {
+      socket.emit('error', { message: 'Agent code and name required' });
+      return;
+    }
 
-      console.log(`👤 Agent online: ${agentCode} (${agentName})`);
+    console.log(`👤 Agent online: ${agentCode} (${agentName})`);
 
-      // Store socket mapping
-      this.connectedAgents.set(agentCode, socket.id);
-      socket.agentCode = agentCode;
-      socket.agentName = agentName;
+    // Store socket mapping
+    this.connectedAgents.set(agentCode, socket.id);
+    socket.agentCode = agentCode;
+    socket.agentName = agentName;
 
-      // Update database
-      await database.upsertAgent(agentCode, agentName, 'online');
-
+    // HYBRID: Update JSON (which auto-syncs to PostgreSQL)
+    const agentManager = require('./services/agentManager');
+    await agentManager.upsertAgent(agentCode, agentName, 'online');
       // Update Redis
       await redis.setAgentStatus(agentCode, 'online', {
         agentName,
@@ -86,15 +86,15 @@ class WebSocketManager {
   }
 
   async handleAgentOffline(socket, data) {
-    try {
-      const agentCode = data.agentCode || socket.agentCode;
-      
-      if (agentCode) {
-        console.log(`👤 Agent offline: ${agentCode}`);
+  try {
+    const agentCode = data.agentCode || socket.agentCode;
+    
+    if (agentCode) {
+      console.log(`👤 Agent offline: ${agentCode}`);
 
-        // Update database
-        await database.updateAgentStatus(agentCode, 'offline');
-
+      // HYBRID: Update JSON (which auto-syncs to PostgreSQL)
+      const agentManager = require('./services/agentManager');
+      await agentManager.updateAgentStatus(agentCode, 'offline');
         // Update Redis
         await redis.setAgentStatus(agentCode, 'offline');
 
@@ -128,7 +128,9 @@ class WebSocketManager {
       console.log(`📞 Call started: ${agentCode} -> ${phoneNumber} (${callType})`);
     }
       // Update database agent status
-      await database.updateAgentStatus(agentCode, 'on_call');
+      // HYBRID: Update JSON agent status (which auto-syncs to PostgreSQL)
+const agentManager = require('./services/agentManager');
+await agentManager.updateAgentStatus(agentCode, 'on_call');
 
       // Update Redis with call data
       await redis.setCallStart(agentCode, {
@@ -186,7 +188,9 @@ class WebSocketManager {
       await redis.updateTodayTalkTime(agentCode, callData.talkDuration);
 
       // Update agent status back to online
-      await database.updateAgentStatus(agentCode, 'online');
+      // HYBRID: Update agent status back to online (JSON + auto-sync to PostgreSQL)
+const agentManager = require('./services/agentManager');
+await agentManager.updateAgentStatus(agentCode, 'online');
 
       // Clear active call and set last call end time
       await redis.setCallEnd(agentCode);
@@ -214,7 +218,9 @@ class WebSocketManager {
       this.stopCallTimer(socket.agentCode);
       
       // Update agent to offline
-      database.updateAgentStatus(socket.agentCode, 'offline').catch(console.error);
+      // HYBRID: Update agent to offline (JSON + auto-sync to PostgreSQL)
+const agentManager = require('./services/agentManager');
+agentManager.updateAgentStatus(socket.agentCode, 'offline').catch(console.error);
       redis.setAgentStatus(socket.agentCode, 'offline').catch(console.error);
       
       // Remove from connected agents

@@ -199,6 +199,161 @@ class AgentManager {
   agentExists(agentCode) {
     return this.agents.hasOwnProperty(agentCode);
   }
+
+  // Auto-sync methods for PostgreSQL integration
+  async syncAgentToPostgreSQL(agentCode) {
+    try {
+      const agent = this.agents[agentCode];
+      if (!agent) {
+        console.log(`⚠️ Agent ${agentCode} not found in JSON for PostgreSQL sync`);
+        return false;
+      }
+
+      const database = require('../database');
+      
+      // Upsert agent in PostgreSQL
+      const query = `
+        INSERT INTO agents (agent_code, agent_name, status, last_seen, updated_at)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (agent_code) 
+        DO UPDATE SET 
+          agent_name = EXCLUDED.agent_name,
+          status = EXCLUDED.status,
+          last_seen = EXCLUDED.last_seen,
+          updated_at = EXCLUDED.updated_at
+        RETURNING *
+      `;
+      
+      const values = [
+        agent.agentCode,
+        agent.agentName,
+        agent.status,
+        agent.lastSeen,
+        agent.updatedAt
+      ];
+
+      const result = await database.pool.query(query, values);
+      console.log(`🔄 Synced agent ${agentCode} to PostgreSQL`);
+      
+      return result.rows[0];
+    } catch (error) {
+      console.error(`❌ Error syncing agent ${agentCode} to PostgreSQL:`, error.message);
+      return false;
+    }
+  }
+
+  async syncAllAgentsToPostgreSQL() {
+    try {
+      console.log(`🔄 Starting bulk sync of ${Object.keys(this.agents).length} agents to PostgreSQL`);
+      
+      const syncResults = [];
+      for (const agentCode of Object.keys(this.agents)) {
+        const result = await this.syncAgentToPostgreSQL(agentCode);
+        syncResults.push({ agentCode, success: !!result });
+      }
+      
+      const successCount = syncResults.filter(r => r.success).length;
+      console.log(`✅ Bulk sync completed: ${successCount}/${syncResults.length} agents synced`);
+      
+      return syncResults;
+    } catch (error) {
+      console.error('❌ Error in bulk sync to PostgreSQL:', error.message);
+      return [];
+    }
+  }
+
+  // Enhanced upsert with auto-sync
+  async upsertAgent(agentCode, agentName, status = 'online') {
+    try {
+      const now = new Date().toISOString();
+      const isNewAgent = !this.agents[agentCode];
+
+      this.agents[agentCode] = {
+        agentCode,
+        agentName,
+        status,
+        lastSeen: now,
+        reminderSettings: this.agents[agentCode]?.reminderSettings || {
+          enabled: true,
+          intervalMinutes: 5
+        },
+        createdAt: this.agents[agentCode]?.createdAt || now,
+        updatedAt: now
+      };
+
+      await this.saveToFile();
+      
+      // Auto-sync to PostgreSQL
+      await this.syncAgentToPostgreSQL(agentCode);
+      
+      if (isNewAgent) {
+        console.log(`➕ Added new agent: ${agentCode} (${agentName}) + synced to PostgreSQL`);
+      } else {
+        console.log(`🔄 Updated agent: ${agentCode} (${agentName}) - Status: ${status} + synced to PostgreSQL`);
+      }
+
+      return this.agents[agentCode];
+    } catch (error) {
+      console.error('❌ Error upserting agent:', error.message);
+      throw error;
+    }
+  }
+
+  // Enhanced status update with auto-sync
+  async updateAgentStatus(agentCode, status) {
+    try {
+      if (!this.agents[agentCode]) {
+        console.log(`⚠️ Agent ${agentCode} not found for status update`);
+        return null;
+      }
+
+      this.agents[agentCode].status = status;
+      this.agents[agentCode].lastSeen = new Date().toISOString();
+      this.agents[agentCode].updatedAt = new Date().toISOString();
+
+      await this.saveToFile();
+      
+      // Auto-sync to PostgreSQL
+      await this.syncAgentToPostgreSQL(agentCode);
+      
+      console.log(`📊 Updated ${agentCode} status to: ${status} + synced to PostgreSQL`);
+      
+      return this.agents[agentCode];
+    } catch (error) {
+      console.error('❌ Error updating agent status:', error.message);
+      throw error;
+    }
+  }
+
+  // Enhanced reminder settings update with auto-sync
+  async updateReminderSettings(agentCode, intervalMinutes, enabled) {
+    try {
+      if (!this.agents[agentCode]) {
+        console.log(`⚠️ Agent ${agentCode} not found for reminder settings update`);
+        return null;
+      }
+
+      this.agents[agentCode].reminderSettings = {
+        enabled: enabled,
+        intervalMinutes: parseInt(intervalMinutes)
+      };
+      this.agents[agentCode].updatedAt = new Date().toISOString();
+
+      await this.saveToFile();
+      
+      // Auto-sync to PostgreSQL (agent basic info might have changed)
+      await this.syncAgentToPostgreSQL(agentCode);
+      
+      console.log(`⚙️ Updated reminder settings for ${agentCode}: ${intervalMinutes}min, enabled: ${enabled} + synced to PostgreSQL`);
+      
+      return this.agents[agentCode];
+    } catch (error) {
+      console.error('❌ Error updating reminder settings:', error.message);
+      throw error;
+    }
+  }
 }
+
+
 
 module.exports = new AgentManager();
