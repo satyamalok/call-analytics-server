@@ -202,10 +202,30 @@ router.get('/search/phone/:phoneNumber', async (req, res) => {
 });
 
 // 🎯 NEW: Get idle sessions for analytics
+// 🎯 ENHANCED: Get idle sessions for analytics with pagination and sorting
 router.get('/idle-sessions', async (req, res) => {
   try {
-    const { agent_code, start_date, end_date, limit = 100 } = req.query;
+    const { 
+      agent_code, 
+      start_date, 
+      end_date, 
+      limit = 20, 
+      page = 1,
+      sort = 'start_time',
+      order = 'desc'
+    } = req.query;
     
+    // Validate sort field
+    const validSortFields = ['agent_code', 'start_time', 'idle_duration'];
+    const sortField = validSortFields.includes(sort) ? sort : 'start_time';
+    const sortOrder = order.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+    
+    // Calculate offset for pagination
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 20;
+    const offset = (pageNum - 1) * limitNum;
+    
+    // Build query
     let query = `
       SELECT * FROM idle_sessions 
       WHERE 1=1
@@ -231,19 +251,57 @@ router.get('/idle-sessions', async (req, res) => {
       params.push(end_date);
     }
 
-    query += ` ORDER BY start_time DESC LIMIT $${paramCount + 1}`;
-    params.push(parseInt(limit));
+    // Add sorting and pagination
+    query += ` ORDER BY ${sortField} ${sortOrder}`;
+    query += ` LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+    params.push(limitNum, offset);
 
-    const result = await database.pool.query(query, params);
+    // Get total count for pagination
+    let countQuery = `
+      SELECT COUNT(*) as total FROM idle_sessions 
+      WHERE 1=1
+    `;
+    const countParams = [];
+    let countParamCount = 0;
+
+    if (agent_code) {
+      countParamCount++;
+      countQuery += ` AND agent_code = $${countParamCount}`;
+      countParams.push(agent_code);
+    }
+
+    if (start_date) {
+      countParamCount++;
+      countQuery += ` AND session_date >= $${countParamCount}`;
+      countParams.push(start_date);
+    }
+
+    if (end_date) {
+      countParamCount++;
+      countQuery += ` AND session_date <= $${countParamCount}`;
+      countParams.push(end_date);
+    }
+
+    // Execute both queries
+    const [result, countResult] = await Promise.all([
+      database.pool.query(query, params),
+      database.pool.query(countQuery, countParams)
+    ]);
+
+    const totalRecords = parseInt(countResult.rows[0].total);
+    const totalPages = Math.ceil(totalRecords / limitNum);
 
     res.json({
       success: true,
       data: {
-        totalResults: result.rows.length,
         idleSessions: result.rows.map(session => ({
           ...session,
           formattedIdleDuration: formatDuration(session.idle_duration)
-        }))
+        })),
+        totalRecords,
+        totalPages,
+        currentPage: pageNum,
+        recordsPerPage: limitNum
       }
     });
 

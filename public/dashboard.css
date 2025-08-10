@@ -1013,3 +1013,55 @@ input:checked + .toggle-slider:before {
 .settings-toggle:hover {
   background: #45a049;
 }
+
+/* Idle Sessions Styles */
+.idle-sessions-section {
+  margin-top: 2rem;
+}
+
+.sort-indicator {
+  font-size: 0.8em;
+  opacity: 0.5;
+}
+
+.sort-active .sort-indicator {
+  opacity: 1;
+  color: #2563eb;
+}
+
+.sort-asc .sort-indicator::after {
+  content: ' ↑';
+}
+
+.sort-desc .sort-indicator::after {
+  content: ' ↓';
+}
+
+/* Duration color coding */
+.duration-green {
+  background-color: #dcfce7;
+  color: #166534;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.duration-yellow {
+  background-color: #fef3c7;
+  color: #92400e;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.duration-red {
+  background-color: #fee2e2;
+  color: #991b1b;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.table-row-hover:hover {
+  background-color: #f9fafb;
+}

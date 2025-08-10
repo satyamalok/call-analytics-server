@@ -1010,6 +1010,277 @@ async function saveAllAgentSettings() {
   }
 }
 
+// js code for Idle Time or Gap Duration
+
+// Idle Sessions Management
+class IdleSessionsManager {
+  constructor() {
+    this.currentPage = 1;
+    this.recordsPerPage = 20;
+    this.currentSort = { field: 'start_time', order: 'desc' };
+    this.currentFilters = { agentCode: '', date: '' };
+    this.totalRecords = 0;
+    this.totalPages = 0;
+    
+    this.init();
+  }
+  
+  init() {
+    this.setupEventListeners();
+    this.loadAgentOptions();
+    this.setDefaultDate();
+    this.loadIdleSessions();
+  }
+  
+  setupEventListeners() {
+    // Filter buttons
+    document.getElementById('applyFilters').addEventListener('click', () => {
+      this.applyFilters();
+    });
+    
+    document.getElementById('clearFilters').addEventListener('click', () => {
+      this.clearFilters();
+    });
+    
+    // Sorting
+    document.querySelectorAll('[data-sort]').forEach(header => {
+      header.addEventListener('click', () => {
+        this.handleSort(header.dataset.sort);
+      });
+    });
+    
+    // Pagination
+    document.getElementById('prevPage').addEventListener('click', () => {
+      if (this.currentPage > 1) {
+        this.currentPage--;
+        this.loadIdleSessions();
+      }
+    });
+    
+    document.getElementById('nextPage').addEventListener('click', () => {
+      if (this.currentPage < this.totalPages) {
+        this.currentPage++;
+        this.loadIdleSessions();
+      }
+    });
+  }
+  
+  async loadAgentOptions() {
+    const agentSelect = document.getElementById('agentSelect');
+    
+    // Add Agent1 to Agent25 options
+    for (let i = 1; i <= 25; i++) {
+      const option = document.createElement('option');
+      option.value = `Agent${i}`;
+      option.textContent = `Agent${i}`;
+      agentSelect.appendChild(option);
+    }
+  }
+  
+  setDefaultDate() {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('dateSelect').value = today;
+    this.currentFilters.date = today;
+  }
+  
+  applyFilters() {
+    this.currentFilters.agentCode = document.getElementById('agentSelect').value;
+    this.currentFilters.date = document.getElementById('dateSelect').value;
+    this.currentPage = 1; // Reset to first page
+    this.loadIdleSessions();
+  }
+  
+  clearFilters() {
+    document.getElementById('agentSelect').value = '';
+    this.setDefaultDate();
+    this.currentFilters = { agentCode: '', date: document.getElementById('dateSelect').value };
+    this.currentPage = 1;
+    this.loadIdleSessions();
+  }
+  
+  handleSort(field) {
+    if (this.currentSort.field === field) {
+      // Toggle order if same field
+      this.currentSort.order = this.currentSort.order === 'asc' ? 'desc' : 'asc';
+    } else {
+      // New field, default to desc
+      this.currentSort.field = field;
+      this.currentSort.order = 'desc';
+    }
+    
+    this.updateSortIndicators();
+    this.currentPage = 1; // Reset to first page
+    this.loadIdleSessions();
+  }
+  
+  updateSortIndicators() {
+    // Clear all active sort indicators
+    document.querySelectorAll('[data-sort]').forEach(header => {
+      header.classList.remove('sort-active', 'sort-asc', 'sort-desc');
+    });
+    
+    // Set active sort indicator
+    const activeHeader = document.querySelector(`[data-sort="${this.currentSort.field}"]`);
+    if (activeHeader) {
+      activeHeader.classList.add('sort-active', `sort-${this.currentSort.order}`);
+    }
+  }
+  
+  async loadIdleSessions() {
+    this.showLoading();
+    
+    try {
+      const params = new URLSearchParams({
+        page: this.currentPage,
+        limit: this.recordsPerPage,
+        sort: this.currentSort.field,
+        order: this.currentSort.order
+      });
+      
+      if (this.currentFilters.agentCode) {
+        params.append('agent_code', this.currentFilters.agentCode);
+      }
+      
+      if (this.currentFilters.date) {
+        params.append('start_date', this.currentFilters.date);
+        params.append('end_date', this.currentFilters.date);
+      }
+      
+      const response = await fetch(`/api/idle-sessions?${params}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        this.renderIdleSessions(data.data.idleSessions);
+        this.updatePagination(data.data.totalResults);
+      } else {
+        this.showError('Failed to load idle sessions');
+      }
+    } catch (error) {
+      console.error('Error loading idle sessions:', error);
+      this.showError('Error loading idle sessions');
+    }
+  }
+  
+  showLoading() {
+    document.getElementById('idleSessionsLoading').classList.remove('hidden');
+    document.getElementById('idleSessionsEmpty').classList.add('hidden');
+    document.getElementById('idleSessionsTable').classList.add('hidden');
+  }
+  
+  showError(message) {
+    document.getElementById('idleSessionsLoading').classList.add('hidden');
+    document.getElementById('idleSessionsEmpty').classList.remove('hidden');
+    document.getElementById('idleSessionsTable').classList.add('hidden');
+    document.getElementById('idleSessionsEmpty').innerHTML = `<p class="text-red-500">${message}</p>`;
+  }
+  
+  renderIdleSessions(sessions) {
+    document.getElementById('idleSessionsLoading').classList.add('hidden');
+    
+    if (sessions.length === 0) {
+      document.getElementById('idleSessionsEmpty').classList.remove('hidden');
+      document.getElementById('idleSessionsTable').classList.add('hidden');
+      return;
+    }
+    
+    document.getElementById('idleSessionsEmpty').classList.add('hidden');
+    document.getElementById('idleSessionsTable').classList.remove('hidden');
+    
+    const tbody = document.getElementById('idleSessionsTableBody');
+    tbody.innerHTML = '';
+    
+    sessions.forEach(session => {
+      const row = this.createSessionRow(session);
+      tbody.appendChild(row);
+    });
+  }
+  
+  createSessionRow(session) {
+    const row = document.createElement('tr');
+    row.className = 'table-row-hover';
+    
+    const startTime = new Date(session.start_time).toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit',
+      hour12: true 
+    });
+    
+    const endTime = new Date(session.end_time).toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit',
+      hour12: true 
+    });
+    
+    const duration = this.formatDuration(session.idle_duration);
+    const durationClass = this.getDurationClass(session.idle_duration);
+    
+    row.innerHTML = `
+      <td class="px-4 py-3 text-sm font-medium text-gray-900">${session.agent_code}</td>
+      <td class="px-4 py-3 text-sm text-gray-700">${session.agent_name || 'Unknown'}</td>
+      <td class="px-4 py-3 text-sm text-gray-700">${startTime}</td>
+      <td class="px-4 py-3 text-sm text-gray-700">${endTime}</td>
+      <td class="px-4 py-3 text-sm">
+        <span class="${durationClass}">${duration}</span>
+      </td>
+    `;
+    
+    return row;
+  }
+  
+  formatDuration(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainingSeconds = seconds % 60;
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m ${remainingSeconds}s`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${remainingSeconds}s`;
+    } else {
+      return `${remainingSeconds}s`;
+    }
+  }
+  
+  getDurationClass(seconds) {
+    const minutes = seconds / 60;
+    
+    if (minutes < 5) {
+      return 'duration-green';
+    } else if (minutes >= 5 && minutes <= 10) {
+      return 'duration-yellow';
+    } else {
+      return 'duration-red';
+    }
+  }
+  
+  updatePagination(totalRecords) {
+    this.totalRecords = totalRecords;
+    this.totalPages = Math.ceil(totalRecords / this.recordsPerPage);
+    
+    // Update records info
+    const start = (this.currentPage - 1) * this.recordsPerPage + 1;
+    const end = Math.min(this.currentPage * this.recordsPerPage, totalRecords);
+    document.getElementById('recordsInfo').textContent = 
+      totalRecords > 0 ? `${start}-${end} of ${totalRecords}` : '0';
+    
+    // Update page info
+    document.getElementById('pageInfo').textContent = 
+      `Page ${this.currentPage} of ${this.totalPages || 1}`;
+    
+    // Update buttons
+    document.getElementById('prevPage').disabled = this.currentPage <= 1;
+    document.getElementById('nextPage').disabled = this.currentPage >= this.totalPages;
+  }
+}
+
+// Initialize Idle Sessions Manager when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+  // Add a small delay to ensure other components are loaded
+  setTimeout(() => {
+    window.idleSessionsManager = new IdleSessionsManager();
+  }, 1000);
+});
+
 function cleanup() {
  debugLog('🧹 Cleaning up dashboard...');
  
