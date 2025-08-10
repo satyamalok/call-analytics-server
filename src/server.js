@@ -165,8 +165,7 @@ async start() {
     // Sync all agents from JSON to PostgreSQL on startup
     console.log('🔄 Syncing agents from JSON to PostgreSQL...');
     const agentManager = require('./services/agentManager');
-    await agentManager.syncAllAgentsToPostGreSQL();
-
+await agentManager.syncAllAgentsToPostgreSQL();
     // Start the server
     this.server.listen(config.server.port, '0.0.0.0', () => {
         console.log('🚀 Call Analytics Server Started');
