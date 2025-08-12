@@ -1288,3 +1288,37 @@ input:checked + .toggle-slider:before {
     justify-content: center;
   }
 }
+
+/* Manual Reminder Button Styles */
+.manual-reminder-btn {
+  background: linear-gradient(135deg, #4CAF50, #45a049);
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  min-width: 70px;
+  box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
+  margin-top: 4px;
+}
+
+.manual-reminder-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #45a049, #3d8b40);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(76, 175, 80, 0.4);
+}
+
+.manual-reminder-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
+}
+
+.manual-reminder-btn:disabled {
+  background: #cccccc;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}

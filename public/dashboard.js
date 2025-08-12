@@ -189,6 +189,57 @@ async function removeAgent(agentCode) {
   }
 }
 
+// NEW: Send manual reminder to agent
+async function sendManualReminder(agentCode, agentName) {
+  if (!isConnected) {
+    showToast('Not connected to server', 'error');
+    return;
+  }
+
+  try {
+    debugLog(`Sending manual reminder to ${agentCode}`);
+    
+    // Disable button temporarily to prevent spam
+    const button = document.querySelector(`[data-agent="${agentCode}"] .manual-reminder-btn`);
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = 'Sending...';
+    }
+
+    // Send manual reminder request via WebSocket
+    socket.emit('send_manual_reminder', {
+      agentCode: agentCode,
+      agentName: agentName,
+      timestamp: new Date().toISOString()
+    });
+
+    showToast(`Manual reminder sent to ${agentCode}`, 'success');
+
+  } catch (error) {
+    debugLog(`Error sending manual reminder to ${agentCode}:`, error.message);
+    showToast(`Failed to send reminder: ${error.message}`, 'error');
+  }
+}
+
+// NEW: Handle manual reminder response from server
+function handleManualReminderResponse(data) {
+  const { success, agentCode, error } = data;
+  
+  // Re-enable button
+  const button = document.querySelector(`[data-agent="${agentCode}"] .manual-reminder-btn`);
+  if (button) {
+    button.disabled = false;
+    button.innerHTML = '📱 Notify';
+  }
+
+  if (success) {
+    debugLog(`Manual reminder sent successfully to ${agentCode}`);
+  } else {
+    debugLog(`Manual reminder failed for ${agentCode}: ${error}`);
+    showToast(`Failed to notify ${agentCode}: ${error}`, 'error');
+  }
+}
+
 // WebSocket Functions
 function initWebSocket() {
   try {
@@ -235,6 +286,7 @@ function setupWebSocketEvents() {
   });
 
   socket.on('dashboard_update', (data) => {
+    socket.on('manual_reminder_response', handleManualReminderResponse);
     debugLog('Dashboard update received');
     handleDashboardUpdate(data);
   });
@@ -480,45 +532,42 @@ function updateOnCallList(agents) {
 }
 
 function updateIdleTimeList(agents) {
- const container = document.getElementById('idleTimeList');
- const badge = document.getElementById('idleCount');
- 
- if (!container || !badge) return;
+  const container = document.getElementById('idleTimeList');
+  
+  if (!container) {
+    debugLog('Warning: idleTimeList container not found');
+    return;
+  }
 
- badge.textContent = agents.length;
- badge.style.display = agents.length > 0 ? 'block' : 'none';
+  const countBadge = document.getElementById('idleAgentCount');
+  if (countBadge) {
+    countBadge.textContent = `${agents.length} agents`;
+  }
 
- if (!agents || agents.length === 0) {
-   container.innerHTML = '<div class="no-data">📞 All agents recently active</div>';
-   return;
- }
+  if (!agents || agents.length === 0) {
+    container.innerHTML = '<div class="no-data">No agents idle</div>';
+    return;
+  }
 
- // Sort by idle time (longest idle first)
- const sortedAgents = [...agents].sort((a, b) => {
-   return (b.minutesSinceLastCall || 0) - (a.minutesSinceLastCall || 0);
- });
-
- const items = sortedAgents.map(agent => {
-   const idleTime = formatIdleTime(agent.minutesSinceLastCall);
-   const urgencyClass = getUrgencyClass(agent.minutesSinceLastCall);
-   
-   return `
-     <div class="idle-item ${urgencyClass} fade-in" data-agent-code="${agent.agentCode}">
-       <div class="agent-info">
-         <div class="agent-name">${sanitizeHTML(agent.agentCode)} - ${sanitizeHTML(agent.agentName)}</div>
-         <div class="last-call-time">Last call: ${formatLastCallTime(agent.lastCallEnd)}</div>
-       </div>
-       <div class="idle-duration">
-         <span class="time-badge idle-badge ${urgencyClass}" data-minutes="${agent.minutesSinceLastCall}">
-           ${idleTime}
-         </span>
-         <div class="idle-status">${getIdleStatusText(agent.minutesSinceLastCall)}</div>
-       </div>
-     </div>
-   `;
- }).join('');
-
- container.innerHTML = items;
+  container.innerHTML = agents.map(agent => {
+    const idleClass = getIdleUrgencyClass(agent.timeSinceLastCall);
+    const timeSinceCall = formatTimeSinceCall(agent.timeSinceLastCall);
+    
+    return `
+      <div class="idle-item ${idleClass}" data-agent="${agent.agentCode}">
+        <div>
+          <div class="agent-name">${sanitizeHTML(agent.agentName)} (${sanitizeHTML(agent.agentCode)})</div>
+          <div class="idle-status">Idle since last call</div>
+        </div>
+        <div class="idle-duration">
+          <div class="idle-badge ${idleClass}">${timeSinceCall}</div>
+          <button class="manual-reminder-btn" onclick="sendManualReminder('${agent.agentCode}', '${agent.agentName}')" title="Send notification to agent">
+            📱 Notify
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 function formatIdleTime(minutes) {

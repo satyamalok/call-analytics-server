@@ -47,6 +47,33 @@ class WebSocketManager {
   await this.handleReminderAcknowledgment(socket, data);
 });
 
+// Manual notification trigger from dashboard
+socket.on('send_manual_reminder', async (data) => {
+  try {
+    const { agentCode, agentName } = data;
+    
+    console.log(`📱 Manual reminder trigger request for ${agentCode} from dashboard`);
+    
+    const success = await this.sendManualReminderToAgent(agentCode, agentName);
+    
+    // Send response back to dashboard
+    socket.emit('manual_reminder_response', {
+      success: success,
+      agentCode: agentCode,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Error handling manual reminder request:', error.message);
+    socket.emit('manual_reminder_response', {
+      success: false,
+      agentCode: data.agentCode,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
     });
   }
 
@@ -526,6 +553,42 @@ async sendReminderToAgent(agentCode, agentName, minutesIdle, intervalMinutes) {
 
   } catch (error) {
     console.error(`❌ Error sending reminder to ${agentCode}:`, error.message);
+    return false;
+  }
+}
+
+// ADD this entire method after the existing sendReminderToAgent method
+async sendManualReminderToAgent(agentCode, agentName) {
+  try {
+    const socketId = this.connectedAgents.get(agentCode);
+    
+    if (socketId) {
+      // Send manual reminder to connected agent via WebSocket
+      const reminderData = {
+        action: 'show_reminder',
+        message: `Manual reminder: Time to make another call!`,
+        idleTime: 'Manual trigger',
+        intervalMinutes: 0, // 0 indicates manual trigger
+        agentCode: agentCode,
+        agentName: agentName,
+        timestamp: new Date().toISOString(),
+        isManual: true // NEW: Flag to distinguish manual vs automatic
+      };
+
+      this.io.to(socketId).emit('reminder_trigger', reminderData);
+      
+      console.log(`📱 Manual reminder sent to ${agentCode} (${agentName})`);
+      
+      // Don't store in Redis for manual reminders (they don't affect automatic timers)
+      
+      return true;
+    } else {
+      console.log(`⚠️ Agent ${agentCode} not connected, manual reminder not sent`);
+      return false;
+    }
+
+  } catch (error) {
+    console.error(`❌ Error sending manual reminder to ${agentCode}:`, error.message);
     return false;
   }
 }
