@@ -473,12 +473,12 @@ function updateTalkTimeTable(agents) {
       <td><span class="call-count">${agent.callCount || 0}</span></td>
       <td>
         <button 
-          class="remove-agent-btn" 
-          data-agent-code="${agent.agentCode}"
-          title="Remove agent from dashboard"
-          aria-label="Remove ${agent.agentCode}">
-          ❌
-        </button>
+  class="remove-agent-btn" 
+  data-agent-code="${agent.agentCode}"
+  title="Remove agent from dashboard"
+  aria-label="Remove ${agent.agentCode}">
+  ❌
+</button>
       </td>
     </tr>
   `).join('');
@@ -565,7 +565,7 @@ function updateIdleTimeList(agents) {
            ${idleTime}
          </span>
          <div class="idle-status">${getIdleStatusText(agent.minutesSinceLastCall)}</div>
-         <button class="manual-reminder-btn" onclick="sendManualReminder('${agent.agentCode}', '${agent.agentName}')" title="Send notification to agent">
+         <button class="manual-reminder-btn" data-agent-code="${agent.agentCode}" data-agent-name="${agent.agentName}" title="Send notification to agent">
            📱 Notify
          </button>
        </div>
@@ -849,6 +849,29 @@ function setupEventListeners() {
       }
     }
   });
+
+  // Manual reminder button click handler
+document.addEventListener('click', (e) => {
+  if (e.target.classList.contains('manual-reminder-btn')) {
+    const agentCode = e.target.getAttribute('data-agent-code');
+    const agentName = e.target.getAttribute('data-agent-name');
+    
+    if (agentCode && agentName) {
+      sendManualReminder(agentCode, agentName);
+    }
+  }
+});
+
+// Remove agent button click handler
+document.addEventListener('click', (e) => {
+  if (e.target.classList.contains('remove-agent-btn')) {
+    const agentCode = e.target.getAttribute('data-agent-code');
+    
+    if (agentCode) {
+      removeAgent(agentCode);
+    }
+  }
+});
 
   // Window events
   window.addEventListener('beforeunload', cleanup);
@@ -1434,7 +1457,6 @@ window.addEventListener('unhandledrejection', (event) => {
 });
 
 // Global functions (accessible from HTML onclick)
-window.removeAgent = removeAgent;
 window.removeToast = removeToast;
 
 // Initialize when DOM is loaded
