@@ -532,42 +532,48 @@ function updateOnCallList(agents) {
 }
 
 function updateIdleTimeList(agents) {
-  const container = document.getElementById('idleTimeList');
-  
-  if (!container) {
-    debugLog('Warning: idleTimeList container not found');
-    return;
-  }
+ const container = document.getElementById('idleTimeList');
+ const badge = document.getElementById('idleCount');
+ 
+ if (!container || !badge) return;
 
-  const countBadge = document.getElementById('idleAgentCount');
-  if (countBadge) {
-    countBadge.textContent = `${agents.length} agents`;
-  }
+ badge.textContent = agents.length;
+ badge.style.display = agents.length > 0 ? 'block' : 'none';
 
-  if (!agents || agents.length === 0) {
-    container.innerHTML = '<div class="no-data">No agents idle</div>';
-    return;
-  }
+ if (!agents || agents.length === 0) {
+   container.innerHTML = '<div class="no-data">📞 All agents recently active</div>';
+   return;
+ }
 
-  container.innerHTML = agents.map(agent => {
-    const idleClass = getIdleUrgencyClass(agent.timeSinceLastCall);
-    const timeSinceCall = formatTimeSinceCall(agent.timeSinceLastCall);
-    
-    return `
-      <div class="idle-item ${idleClass}" data-agent="${agent.agentCode}">
-        <div>
-          <div class="agent-name">${sanitizeHTML(agent.agentName)} (${sanitizeHTML(agent.agentCode)})</div>
-          <div class="idle-status">Idle since last call</div>
-        </div>
-        <div class="idle-duration">
-          <div class="idle-badge ${idleClass}">${timeSinceCall}</div>
-          <button class="manual-reminder-btn" onclick="sendManualReminder('${agent.agentCode}', '${agent.agentName}')" title="Send notification to agent">
-            📱 Notify
-          </button>
-        </div>
-      </div>
-    `;
-  }).join('');
+ // Sort by idle time (longest idle first)
+ const sortedAgents = [...agents].sort((a, b) => {
+   return (b.minutesSinceLastCall || 0) - (a.minutesSinceLastCall || 0);
+ });
+
+ const items = sortedAgents.map(agent => {
+   const idleTime = formatIdleTime(agent.minutesSinceLastCall);
+   const urgencyClass = getUrgencyClass(agent.minutesSinceLastCall);
+   
+   return `
+     <div class="idle-item ${urgencyClass} fade-in" data-agent-code="${agent.agentCode}">
+       <div class="agent-info">
+         <div class="agent-name">${sanitizeHTML(agent.agentCode)} - ${sanitizeHTML(agent.agentName)}</div>
+         <div class="last-call-time">Last call: ${formatLastCallTime(agent.lastCallEnd)}</div>
+       </div>
+       <div class="idle-duration">
+         <span class="time-badge idle-badge ${urgencyClass}" data-minutes="${agent.minutesSinceLastCall}">
+           ${idleTime}
+         </span>
+         <div class="idle-status">${getIdleStatusText(agent.minutesSinceLastCall)}</div>
+         <button class="manual-reminder-btn" onclick="sendManualReminder('${agent.agentCode}', '${agent.agentName}')" title="Send notification to agent">
+           📱 Notify
+         </button>
+       </div>
+     </div>
+   `;
+ }).join('');
+
+ container.innerHTML = items;
 }
 
 function formatIdleTime(minutes) {
@@ -580,6 +586,26 @@ function formatIdleTime(minutes) {
    const remainingMinutes = minutes % 60;
    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
  }
+}
+
+// Missing functions for manual notification feature
+function formatTimeSinceCall(minutes) {
+  if (!minutes || minutes < 0) return '0m';
+  
+  if (minutes < 60) {
+    return `${minutes}m`;
+  } else {
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+  }
+}
+
+function getIdleUrgencyClass(minutes) {
+  if (minutes >= 60) return 'urgent';
+  if (minutes >= 30) return 'warning';
+  if (minutes >= 15) return 'caution';
+  return 'normal';
 }
 
 function formatLastCallTime(lastCallEnd) {
