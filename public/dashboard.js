@@ -588,6 +588,64 @@ function formatIdleTime(minutes) {
  }
 }
 
+//step 7
+// ADD these handlers to your existing dashboard.js file
+
+// Handle call updates from reconciliation
+socket.on('call_update', (data) => {
+    console.log('📞 Call update received:', data);
+    
+    // Update agent's talk time in the dashboard
+    updateAgentTalkTime(data.agentCode, data.talkDuration);
+    
+    // Show reconciliation indicator if data source is 'reconciled'
+    if (data.dataSource === 'reconciled') {
+        showReconciliationNotification(data);
+    }
+});
+
+// Handle talk time updates
+socket.on('talktime_update', (data) => {
+    console.log('📊 Talk time update received:', data);
+    updateAgentTalkTime(data.agentCode, data.talkTime);
+});
+
+function updateAgentTalkTime(agentCode, additionalTalkTime) {
+    const agentRow = document.querySelector(`[data-agent-code="${agentCode}"]`);
+    if (agentRow) {
+        const talkTimeCell = agentRow.querySelector('.talk-time');
+        if (talkTimeCell) {
+            const currentTime = parseInt(talkTimeCell.textContent) || 0;
+            const newTime = currentTime + additionalTalkTime;
+            talkTimeCell.textContent = formatDuration(newTime);
+        }
+    }
+}
+
+function showReconciliationNotification(data) {
+    // Create a subtle notification for reconciled calls
+    const notification = document.createElement('div');
+    notification.className = 'reconciliation-notification';
+    notification.innerHTML = `
+        <span>📊 Reconciled call for ${data.agentName}</span>
+        <span class="close">&times;</span>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+        }
+    }, 3000);
+    
+    // Manual close
+    notification.querySelector('.close').onclick = () => {
+        notification.parentNode.removeChild(notification);
+    };
+}
+
 // Missing functions for manual notification feature
 function formatTimeSinceCall(minutes) {
   if (!minutes || minutes < 0) return '0m';

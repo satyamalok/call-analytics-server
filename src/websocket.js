@@ -28,6 +28,9 @@ class WebSocketManager {
       socket.on('call_started', async (data) => {
   console.log(`📞 Raw call_started data received:`, JSON.stringify(data, null, 2));
   await this.handleCallStarted(socket, data);
+
+
+  
 });
 
       socket.on('call_ended', async (data) => {
@@ -637,10 +640,80 @@ async handleReminderAcknowledgment(socket, data) {
   console.log('✅ Reminder system started - checking every minute');
 }
 
-// 🎯 REMOVED: Call timers are no longer needed in the dashboard
-// Real-time updates are handled by WebSocket events only
+//new method added Step 6
+// ADD this method to the existing WebSocketManager class
 
+handleCallUpdate(socket, data) {
+  try {
+    const { 
+      agentCode, 
+      agentName, 
+      phoneNumber, 
+      contactName, 
+      callType, 
+      talkDuration, 
+      totalDuration, 
+      callDate, 
+      timestamp, 
+      dataSource 
+    } = data;
 
+    console.log(`📞 Call update received from ${agentCode} (${dataSource}): ${callType} call`);
+
+    // Update agent's last activity
+    this.updateAgentActivity(agentCode, agentName);
+
+    // Broadcast call update to dashboard
+    this.io.emit('call_update', {
+      agentCode,
+      agentName,
+      phoneNumber,
+      contactName,
+      callType,
+      talkDuration,
+      totalDuration,
+      callDate,
+      timestamp,
+      dataSource,
+      receivedAt: new Date().toISOString()
+    });
+
+    // Send acknowledgment back to app
+    socket.emit('call_update_ack', {
+      status: 'received',
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error handling call update:', error.message);
+  }
+}
+
+handleTalkTimeUpdate(socket, data) {
+  try {
+    const { agentCode, agentName, talkTime, timestamp } = data;
+
+    console.log(`📊 Talk time update for ${agentCode}: ${talkTime}s`);
+
+    // Broadcast updated talk time to dashboard
+    this.io.emit('talktime_update', {
+      agentCode,
+      agentName,
+      talkTime,
+      timestamp,
+      receivedAt: new Date().toISOString()
+    });
+
+    // Send acknowledgment
+    socket.emit('talktime_update_ack', {
+      status: 'received',
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error handling talk time update:', error.message);
+  }
+}
 
 // Enhanced cleanup method
   // Enhanced cleanup method

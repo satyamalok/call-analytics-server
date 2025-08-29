@@ -1322,3 +1322,29 @@ input:checked + .toggle-slider:before {
   transform: none;
   box-shadow: none;
 }
+
+/* ADD this CSS to your existing dashboard.css file */
+
+.reconciliation-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #e3f2fd;
+    border: 1px solid #2196f3;
+    border-radius: 4px;
+    padding: 10px 15px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    z-index: 1000;
+    animation: slideIn 0.3s ease-out;
+}
+
+.reconciliation-notification .close {
+    margin-left: 10px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
