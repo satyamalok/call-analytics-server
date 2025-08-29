@@ -268,7 +268,7 @@ async removeAgent(agentCode) {
     }
   }
 
-  // Enhanced upsert with auto-sync
+  // Add or update agent
   async upsertAgent(agentCode, agentName, status = 'online') {
     try {
       const now = new Date().toISOString();
@@ -289,44 +289,15 @@ async removeAgent(agentCode) {
 
       await this.saveToFile();
       
-      // Auto-sync to PostgreSQL
-      await this.syncAgentToPostgreSQL(agentCode);
-      
       if (isNewAgent) {
-        console.log(`➕ Added new agent: ${agentCode} (${agentName}) + synced to PostgreSQL`);
+        console.log(`➕ Added new agent: ${agentCode} (${agentName})`);
       } else {
-        console.log(`🔄 Updated agent: ${agentCode} (${agentName}) - Status: ${status} + synced to PostgreSQL`);
+        console.log(`🔄 Updated agent: ${agentCode} (${agentName}) - Status: ${status}`);
       }
 
       return this.agents[agentCode];
     } catch (error) {
       console.error('❌ Error upserting agent:', error.message);
-      throw error;
-    }
-  }
-
-  // Enhanced status update with auto-sync
-  async updateAgentStatus(agentCode, status) {
-    try {
-      if (!this.agents[agentCode]) {
-        console.log(`⚠️ Agent ${agentCode} not found for status update`);
-        return null;
-      }
-
-      this.agents[agentCode].status = status;
-      this.agents[agentCode].lastSeen = new Date().toISOString();
-      this.agents[agentCode].updatedAt = new Date().toISOString();
-
-      await this.saveToFile();
-      
-      // Auto-sync to PostgreSQL
-      await this.syncAgentToPostgreSQL(agentCode);
-      
-      console.log(`📊 Updated ${agentCode} status to: ${status} + synced to PostgreSQL`);
-      
-      return this.agents[agentCode];
-    } catch (error) {
-      console.error('❌ Error updating agent status:', error.message);
       throw error;
     }
   }

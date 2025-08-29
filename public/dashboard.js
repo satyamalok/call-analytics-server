@@ -4,8 +4,8 @@ let dashboardData = {};
 let isConnected = false;
 let reconnectAttempts = 0;
 let maxReconnectAttempts = 5;
-let sortBy = 'agentCode';
-let sortDirection = 'asc';
+let sortBy = 'talkTime';
+let sortDirection = 'desc';
 
 // Debug logging
 function debugLog(message, data = null) {
@@ -441,6 +441,7 @@ function updateTalkTimeTable(agents) {
   }
 
   // Sort data
+  // Sort data - default to talkTime descending
   const sortedAgents = [...agents].sort((a, b) => {
     let aValue, bValue;
     
@@ -454,8 +455,8 @@ function updateTalkTimeTable(agents) {
         bValue = b.totalTalkTime || 0;
         break;
       default:
-        aValue = a.agentCode.toLowerCase();
-        bValue = b.agentCode.toLowerCase();
+        aValue = a.totalTalkTime || 0;  // Default to talkTime
+        bValue = b.totalTalkTime || 0;
     }
 
     let comparison = 0;
@@ -1516,6 +1517,202 @@ window.addEventListener('unhandledrejection', (event) => {
 
 // Global functions (accessible from HTML onclick)
 window.removeToast = removeToast;
+
+// Agent History Management
+class AgentHistoryManager {
+  constructor() {
+    this.init();
+  }
+  
+  init() {
+    this.setupEventListeners();
+    this.loadAgentOptions();
+    this.setDefaultDate();
+  }
+  
+  setupEventListeners() {
+    const loadBtn = document.getElementById('loadHistoryBtn');
+    const clearBtn = document.getElementById('clearHistoryBtn');
+    
+    if (loadBtn) {
+      loadBtn.addEventListener('click', () => this.loadAgentHistory());
+    }
+    
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => this.clearHistory());
+    }
+  }
+  
+  loadAgentOptions() {
+    const agentSelect = document.getElementById('historyAgentSelect');
+    if (!agentSelect) return;
+    
+    // Add Agent1 to Agent25 options
+    for (let i = 1; i <= 25; i++) {
+      const option = document.createElement('option');
+      option.value = `Agent${i}`;
+      option.textContent = `Agent${i}`;
+      agentSelect.appendChild(option);
+    }
+  }
+  
+  setDefaultDate() {
+    const startDateInput = document.getElementById('historyStartDate');
+    if (!startDateInput) return;
+    
+    const today = new Date().toISOString().split('T')[0];
+    startDateInput.value = today;
+  }
+  
+  async loadAgentHistory() {
+    const agentSelect = document.getElementById('historyAgentSelect');
+    const startDateInput = document.getElementById('historyStartDate');
+    const endDateInput = document.getElementById('historyEndDate');
+    
+    if (!agentSelect || !startDateInput) return;
+    
+    const agentCode = agentSelect.value;
+    const startDate = startDateInput.value;
+    const endDate = endDateInput.value || null;
+    
+    if (!agentCode) {
+      showToast('Please select an agent', 'warning');
+      return;
+    }
+    
+    if (!startDate) {
+      showToast('Please select a start date', 'warning');
+      return;
+    }
+    
+    this.showLoading();
+    
+    try {
+      let url = `/api/agent-history?agent_code=${agentCode}&start_date=${startDate}`;
+      if (endDate) {
+        url += `&end_date=${endDate}`;
+      }
+      
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      if (data.success) {
+        this.renderHistory(data.data.history);
+        this.updateCount(data.data.totalRecords);
+      } else {
+        this.showError('Failed to load agent history');
+      }
+    } catch (error) {
+      console.error('Error loading agent history:', error);
+      this.showError('Error loading agent history');
+    }
+  }
+  
+  showLoading() {
+    const loading = document.getElementById('historyLoading');
+    const empty = document.getElementById('historyEmpty');
+    const table = document.getElementById('historyTable');
+    
+    if (loading) loading.classList.remove('hidden');
+    if (empty) empty.classList.add('hidden');
+    if (table) table.classList.add('hidden');
+  }
+  
+  showError(message) {
+    const loading = document.getElementById('historyLoading');
+    const empty = document.getElementById('historyEmpty');
+    const table = document.getElementById('historyTable');
+    
+    if (loading) loading.classList.add('hidden');
+    if (empty) {
+      empty.classList.remove('hidden');
+      empty.innerHTML = `<p style="color: var(--error-color);">${message}</p>`;
+    }
+    if (table) table.classList.add('hidden');
+  }
+  
+  renderHistory(history) {
+    const loading = document.getElementById('historyLoading');
+    const empty = document.getElementById('historyEmpty');
+    const table = document.getElementById('historyTable');
+    
+    if (loading) loading.classList.add('hidden');
+    
+    if (history.length === 0) {
+      if (empty) {
+        empty.classList.remove('hidden');
+        empty.innerHTML = '<p>No call history found for the selected criteria.</p>';
+      }
+      if (table) table.classList.add('hidden');
+      return;
+    }
+    
+    if (empty) empty.classList.add('hidden');
+    if (table) table.classList.remove('hidden');
+    
+    const tbody = document.getElementById('historyTableBody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    history.forEach(record => {
+      const row = this.createHistoryRow(record);
+      tbody.appendChild(row);
+    });
+  }
+  
+  createHistoryRow(record) {
+    const row = document.createElement('tr');
+    
+    row.innerHTML = `
+      <td style="font-weight: 600;">${record.date}</td>
+      <td>${record.agentName || 'Unknown'}</td>
+      <td style="font-weight: 600; color: var(--primary-color);">${record.formattedTalktime}</td>
+      <td>${record.totalCalls}</td>
+    `;
+    
+    return row;
+  }
+  
+  updateCount(totalRecords) {
+    const countBadge = document.getElementById('historyCount');
+    if (countBadge) {
+      countBadge.textContent = `${totalRecords} records`;
+    }
+  }
+  
+  clearHistory() {
+    const agentSelect = document.getElementById('historyAgentSelect');
+    const startDateInput = document.getElementById('historyStartDate');
+    const endDateInput = document.getElementById('historyEndDate');
+    
+    if (agentSelect) agentSelect.value = '';
+    if (endDateInput) endDateInput.value = '';
+    this.setDefaultDate();
+    
+    const empty = document.getElementById('historyEmpty');
+    const table = document.getElementById('historyTable');
+    const loading = document.getElementById('historyLoading');
+    
+    if (empty) {
+      empty.classList.remove('hidden');
+      empty.innerHTML = '<p>Select an agent and date to view call history.</p>';
+    }
+    if (table) table.classList.add('hidden');
+    if (loading) loading.classList.add('hidden');
+    
+    this.updateCount(0);
+  }
+}
+
+// Initialize Agent History Manager when dashboard is loaded
+if (typeof window !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+      window.agentHistoryManager = new AgentHistoryManager();
+    }, 2500);
+  });
+}
 
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', init);

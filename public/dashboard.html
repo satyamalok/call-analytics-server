@@ -81,10 +81,10 @@
                 <h2>📊 Today's Talk Time</h2>
                 <div class="card-controls">
                     <select id="sortSelect">
+                        <option value="talkTime-desc" selected>Talk Time ↓</option>
+                        <option value="talkTime-asc">Talk Time ↑</option>
                         <option value="agentCode-asc">Agent Code ↑</option>
                         <option value="agentCode-desc">Agent Code ↓</option>
-                        <option value="talkTime-asc">Talk Time ↑</option>
-                        <option value="talkTime-desc">Talk Time ↓</option>
                     </select>
                 </div>
             </div>
@@ -162,6 +162,82 @@
             </div>
         </div>
         
+<!-- Agent History Card -->
+        <div class="dashboard-card full-width" id="agentHistoryCard">
+            <div class="card-header">
+                <h2>📈 Agent Call History</h2>
+                <div class="card-badge" id="historyCount">0 records</div>
+            </div>
+            <div class="card-content">
+                <!-- Filter Section -->
+                <div class="filter-section">
+                    <div class="flex">
+                        <div class="flex-1">
+                            <label for="historyAgentSelect">Select Agent</label>
+                            <select id="historyAgentSelect">
+                                <option value="">Select Agent</option>
+                            </select>
+                        </div>
+                        
+                        <div class="flex-1">
+                            <label for="historyStartDate">Start Date</label>
+                            <input type="date" id="historyStartDate">
+                        </div>
+                        
+                        <div class="flex-1">
+                            <label for="historyEndDate">End Date (Optional)</label>
+                            <input type="date" id="historyEndDate">
+                        </div>
+                        
+                        <div>
+                            <button id="loadHistoryBtn" class="filter-btn">
+                                Load History
+                            </button>
+                        </div>
+                        
+                        <div>
+                            <button id="clearHistoryBtn" class="filter-btn secondary">
+                                Clear
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Results Section -->
+                <div id="agentHistoryResults">
+                    <!-- Loading State -->
+                    <div id="historyLoading" class="idle-sessions-loading hidden">
+                        <div class="spinner"></div>
+                        <p>Loading agent history...</p>
+                    </div>
+                    
+                    <!-- Empty State -->
+                    <div id="historyEmpty" class="idle-sessions-empty">
+                        <p>Select an agent and date to view call history.</p>
+                    </div>
+                    
+                    <!-- Data Table -->
+                    <div id="historyTable" class="hidden">
+                        <div class="table-container">
+                            <table class="idle-sessions-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Agent Name</th>
+                                        <th>Talk Time</th>
+                                        <th>Total Calls</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="historyTableBody">
+                                    <!-- Table rows will be populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Idle Sessions Analytics Section -->
 <div class="dashboard-grid">
   <div class="idle-sessions-section">

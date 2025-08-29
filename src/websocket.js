@@ -1,6 +1,7 @@
 const database = require('./database');
 const redis = require('./redis');
 const dailyTalkTimeManager = require('./services/dailyTalkTimeManager');
+const nocodbService = require('./services/nocodbService');
 
 class WebSocketManager {
   constructor(io) {
@@ -150,8 +151,8 @@ socket.on('send_manual_reminder', async (data) => {
       return;
     }
 
-    // 🎯 NEW: Record idle session if agent was idle
-    await this.recordIdleSession(agentCode, agentName);
+// 🎯 ENHANCED: Record idle session with NocoDB
+await this.recordIdleSessionToNocoDB(agentCode, agentName);
 
     // Enhanced logging for incoming vs outgoing
     if (callType === 'incoming' && phoneNumber === 'Incoming Call') {
@@ -362,8 +363,8 @@ agentManager.updateAgentStatus(socket.agentCode, 'offline').catch(console.error)
   }
 }
 
-// 🎯 NEW: Record idle session when agent goes from idle to on call
-async recordIdleSession(agentCode, agentName) {
+// 🎯 ENHANCED: Record idle session to NocoDB when agent goes from idle to on call
+async recordIdleSessionToNocoDB(agentCode, agentName) {
   try {
     const idleStartTime = this.agentIdleStartTimes.get(agentCode);
     
@@ -373,24 +374,93 @@ async recordIdleSession(agentCode, agentName) {
       
       // Only record if idle for more than 30 seconds (avoid quick call switches)
       if (idleDurationSeconds > 30) {
-        const sessionData = {
+        const startTimeFormatted = nocodbService.formatTimeAmPm(idleStartTime);
+        const dateFormatted = nocodbService.formatDate(idleStartTime);
+        
+        // Add to queue for processing
+        await this.addIdleSessionToQueue({
           agentCode,
           agentName: agentName || 'Unknown',
-          startTime: idleStartTime.toISOString(),
-          endTime: idleEndTime.toISOString(),
-          idleDuration: idleDurationSeconds,
-          sessionDate: idleStartTime.toISOString().split('T')[0]
-        };
+          startTime: startTimeFormatted,
+          idleDurationSeconds,
+          date: dateFormatted
+        });
         
-        await database.insertIdleSession(sessionData);
-        console.log(`⏱️ Recorded idle session: ${agentCode} - ${idleDurationSeconds}s`);
+        console.log(`⏱️ Queued idle session: ${agentCode} - ${idleDurationSeconds}s`);
       }
       
       // Clear the idle start time
       this.agentIdleStartTimes.delete(agentCode);
     }
   } catch (error) {
-    console.error('❌ Error recording idle session:', error.message);
+    console.error('❌ Error recording idle session to NocoDB:', error.message);
+  }
+}
+
+// 🎯 NEW: Idle session queue to prevent missing data
+constructor(io) {
+  this.io = io;
+  this.recentReminders = new Set();
+  this.connectedAgents = new Map();
+  this.agentIdleStartTimes = new Map();
+  // ADD THESE NEW PROPERTIES:
+  this.idleSessionQueue = [];
+  this.processingQueue = false;
+  
+  this.init();
+  this.startReminderSystem();
+}
+
+// 🎯 NEW: Queue system for idle sessions
+async addIdleSessionToQueue(sessionData) {
+  this.idleSessionQueue.push(sessionData);
+  console.log(`📝 Added to idle queue: ${sessionData.agentCode}, Queue size: ${this.idleSessionQueue.length}`);
+  
+  if (!this.processingQueue) {
+    await this.processIdleSessionQueue();
+  }
+}
+
+async processIdleSessionQueue() {
+  if (this.processingQueue || this.idleSessionQueue.length === 0) {
+    return;
+  }
+  
+  this.processingQueue = true;
+  
+  while (this.idleSessionQueue.length > 0) {
+    const sessionData = this.idleSessionQueue.shift();
+    
+    try {
+      await nocodbService.addIdleSession(
+        sessionData.agentCode,
+        sessionData.agentName,
+        sessionData.startTime,
+        sessionData.idleDurationSeconds,
+        sessionData.date
+      );
+      
+      console.log(`✅ Idle session saved to NocoDB: ${sessionData.agentCode} - ${sessionData.idleDurationSeconds}s`);
+      
+      // Small delay to prevent rate limiting
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+    } catch (error) {
+      console.error(`❌ Failed to save idle session for ${sessionData.agentCode}:`, error.message);
+      
+      // Re-queue failed item (try again later)
+      this.idleSessionQueue.push(sessionData);
+      break; // Stop processing to prevent infinite loop
+    }
+  }
+  
+  this.processingQueue = false;
+  
+  // If queue still has items, try again in 5 seconds
+  if (this.idleSessionQueue.length > 0) {
+    setTimeout(() => {
+      this.processIdleSessionQueue();
+    }, 5000);
   }
 }
 

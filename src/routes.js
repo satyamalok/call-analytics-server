@@ -2,6 +2,7 @@ const express = require('express');
 const database = require('./database');
 const redis = require('./redis');
 const agentManager = require('./services/agentManager');
+const nocodbService = require('./services/nocodbService');
 const dailyTalkTimeManager = require('./services/dailyTalkTimeManager');
 const router = express.Router();
 
@@ -154,20 +155,28 @@ router.get('/agents', async (req, res) => {
   }
 });
 
-// 🎯 NEW: Search calls by phone number
+// 🎯 ENHANCED: Search calls by phone number using NocoDB
 router.get('/search/phone/:phoneNumber', async (req, res) => {
   try {
     const { phoneNumber } = req.params;
-    const { limit = 50 } = req.query;
 
-    if (!phoneNumber || phoneNumber.length < 3) {
+    if (!phoneNumber || phoneNumber.length !== 10) {
       return res.status(400).json({
         success: false,
-        error: 'Phone number must be at least 3 digits'
+        error: 'Phone number must be exactly 10 digits'
       });
     }
 
-    const calls = await database.searchCallsByPhoneNumber(phoneNumber, parseInt(limit));
+    // Validate only digits
+    if (!/^\d{10}$/.test(phoneNumber)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Phone number must contain only digits'
+      });
+    }
+
+    const result = await nocodbService.searchCallsByPhone(phoneNumber);
+    const calls = result[0]?.list || [];
 
     res.json({
       success: true,
@@ -175,19 +184,19 @@ router.get('/search/phone/:phoneNumber', async (req, res) => {
         phoneNumber,
         totalResults: calls.length,
         calls: calls.map(call => ({
-          id: call.id,
-          agentCode: call.agent_code,
-          agentName: call.agent_name || 'Unknown',
-          phoneNumber: call.phone_number,
-          contactName: call.contact_name,
-          callType: call.call_type,
-          talkDuration: call.talk_duration,
-          formattedTalkDuration: formatDuration(call.talk_duration),
-          totalDuration: call.total_duration,
-          callDate: call.call_date,
-          startTime: call.start_time,
-          endTime: call.end_time,
-          createdAt: call.created_at
+          id: call.Id,
+          agentCode: call['Agent Code'],
+          agentName: call['Agent Name'] || 'Unknown',
+          phoneNumber: call.Mobile,
+          contactName: call['Contact Name'],
+          callType: call['Call Type'],
+          talkDuration: parseInt(call['Talk Duration'] || 0),
+          formattedTalkDuration: formatDuration(parseInt(call['Talk Duration'] || 0)),
+          totalDuration: parseInt(call['Total Duration'] || 0),
+          callDate: call.Date,
+          startTime: call['Start Time'],
+          endTime: call['End Time'],
+          timestamp: formatHumanReadableTimestamp(call.Timestamp)
         }))
       }
     });
@@ -203,110 +212,113 @@ router.get('/search/phone/:phoneNumber', async (req, res) => {
 
 // 🎯 NEW: Get idle sessions for analytics
 // 🎯 ENHANCED: Get idle sessions for analytics with pagination and sorting
+// 🎯 ENHANCED: Get idle sessions from NocoDB with filtering
 router.get('/idle-sessions', async (req, res) => {
   try {
     const { 
       agent_code, 
-      start_date, 
-      end_date, 
+      date, 
       limit = 20, 
-      page = 1,
-      sort = 'start_time',
-      order = 'desc'
+      offset = 0
     } = req.query;
     
-    // Validate sort field
-    const validSortFields = ['agent_code', 'start_time', 'idle_duration'];
-    const sortField = validSortFields.includes(sort) ? sort : 'start_time';
-    const sortOrder = order.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+    const result = await nocodbService.getIdleSessions(
+      agent_code, 
+      date, 
+      parseInt(limit), 
+      parseInt(offset)
+    );
     
-    // Calculate offset for pagination
-    const pageNum = parseInt(page) || 1;
-    const limitNum = parseInt(limit) || 20;
-    const offset = (pageNum - 1) * limitNum;
-    
-    // Build query
-    let query = `
-      SELECT * FROM idle_sessions 
-      WHERE 1=1
-    `;
-    const params = [];
-    let paramCount = 0;
-
-    if (agent_code) {
-      paramCount++;
-      query += ` AND agent_code = $${paramCount}`;
-      params.push(agent_code);
-    }
-
-    if (start_date) {
-      paramCount++;
-      query += ` AND session_date >= $${paramCount}`;
-      params.push(start_date);
-    }
-
-    if (end_date) {
-      paramCount++;
-      query += ` AND session_date <= $${paramCount}`;
-      params.push(end_date);
-    }
-
-    // Add sorting and pagination
-    query += ` ORDER BY ${sortField} ${sortOrder}`;
-    query += ` LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
-    params.push(limitNum, offset);
-
-    // Get total count for pagination
-    let countQuery = `
-      SELECT COUNT(*) as total FROM idle_sessions 
-      WHERE 1=1
-    `;
-    const countParams = [];
-    let countParamCount = 0;
-
-    if (agent_code) {
-      countParamCount++;
-      countQuery += ` AND agent_code = $${countParamCount}`;
-      countParams.push(agent_code);
-    }
-
-    if (start_date) {
-      countParamCount++;
-      countQuery += ` AND session_date >= $${countParamCount}`;
-      countParams.push(start_date);
-    }
-
-    if (end_date) {
-      countParamCount++;
-      countQuery += ` AND session_date <= $${countParamCount}`;
-      countParams.push(end_date);
-    }
-
-    // Execute both queries
-    const [result, countResult] = await Promise.all([
-      database.pool.query(query, params),
-      database.pool.query(countQuery, countParams)
-    ]);
-
-    const totalRecords = parseInt(countResult.rows[0].total);
-    const totalPages = Math.ceil(totalRecords / limitNum);
+    const sessions = result[0]?.list || [];
+    const totalRecords = result[0]?.pageInfo?.totalRows || 0;
+    const pageSize = parseInt(limit);
+    const currentPage = Math.floor(parseInt(offset) / pageSize) + 1;
+    const totalPages = Math.ceil(totalRecords / pageSize);
 
     res.json({
       success: true,
       data: {
-        idleSessions: result.rows.map(session => ({
-          ...session,
-          formattedIdleDuration: formatDuration(session.idle_duration)
+        idleSessions: sessions.map(session => ({
+          id: session.Id,
+          date: session.Date,
+          agentCode: session['Agent Code'],
+          agentName: session['Agent Name'],
+          startTime: session['Start Time'],
+          idleDuration: parseInt(session['Idle Duration']),
+          formattedIdleDuration: formatDuration(parseInt(session['Idle Duration']))
         })),
         totalRecords,
         totalPages,
-        currentPage: pageNum,
-        recordsPerPage: limitNum
+        currentPage,
+        recordsPerPage: pageSize
       }
     });
 
   } catch (error) {
     console.error('❌ Error getting idle sessions:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// 🎯 NEW: Get agent call history from Daily Talktime
+router.get('/agent-history', async (req, res) => {
+  try {
+    const { 
+      agent_code, 
+      start_date, 
+      end_date,
+      limit = 50, 
+      offset = 0 
+    } = req.query;
+    
+    if (!agent_code) {
+      return res.status(400).json({
+        success: false,
+        error: 'Agent code is required'
+      });
+    }
+    
+    if (!start_date) {
+      return res.status(400).json({
+        success: false,
+        error: 'Start date is required'
+      });
+    }
+    
+    const result = await nocodbService.getDailyTalktime(
+      agent_code,
+      start_date,
+      end_date,
+      parseInt(limit),
+      parseInt(offset)
+    );
+    
+    const history = result[0]?.list || [];
+    const totalRecords = result[0]?.pageInfo?.totalRows || 0;
+
+    res.json({
+      success: true,
+      data: {
+        agentCode: agent_code,
+        startDate: start_date,
+        endDate: end_date,
+        history: history.map(record => ({
+          id: record.Id,
+          date: record.Date,
+          agentName: record['Agent Name'],
+          talktime: parseInt(record.Talktime || 0),
+          formattedTalktime: formatDuration(parseInt(record.Talktime || 0)),
+          totalCalls: parseInt(record['Total Calls'] || 0)
+        })),
+        totalRecords
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error getting agent history:', error.message);
     res.status(500).json({
       success: false,
       error: error.message
@@ -668,5 +680,40 @@ router.post('/reminder-settings-bulk', async (req, res) => {
     });
   }
 });
+
+// Helper function to format human readable timestamp
+function formatHumanReadableTimestamp(timestamp) {
+  if (!timestamp) return 'Unknown';
+  
+  try {
+    const date = new Date(timestamp);
+    return date.toLocaleString('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      timeZone: 'Asia/Kolkata'
+    });
+  } catch (error) {
+    return timestamp;
+  }
+}
+
+// Utility function (keep existing)
+function formatDuration(seconds) {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${remainingSeconds}s`;
+  } else if (minutes > 0) {
+    return `${minutes}m ${remainingSeconds}s`;
+  } else {
+    return `${remainingSeconds}s`;
+  }
+}
 
 module.exports = router;

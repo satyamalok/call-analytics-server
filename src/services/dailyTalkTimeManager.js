@@ -4,76 +4,66 @@ const path = require('path');
 class DailyTalkTimeManager {
   constructor() {
     this.filePath = path.join(__dirname, '../../data/daily-talk-time.json');
-    this.data = { dailyData: {}, metadata: {} };
+    this.todayData = {}; // Store only today's data in memory
+    this.today = new Date().toISOString().split('T')[0];
     this.init();
   }
 
   async init() {
     try {
-      await this.loadData();
-      console.log('✅ DailyTalkTimeManager initialized');
+      await this.loadTodayData();
+      this.startDayResetChecker();
+      console.log('✅ DailyTalkTimeManager initialized (memory-based for today only)');
     } catch (error) {
       console.error('❌ DailyTalkTimeManager initialization failed:', error.message);
-      await this.createDefaultFile();
+      this.todayData = {};
     }
   }
 
-  async loadData() {
+  async loadTodayData() {
     try {
+      // Check if file exists and load only today's data
       const data = await fs.readFile(this.filePath, 'utf8');
       const parsed = JSON.parse(data);
-      this.data = parsed;
-      console.log(`📊 Loaded daily talk time data for ${Object.keys(this.data.dailyData).length} days`);
+      
+      // Only keep today's data in memory
+      const today = new Date().toISOString().split('T')[0];
+      this.todayData = parsed.dailyData?.[today] || {};
+      this.today = today;
+      
+      console.log(`📊 Loaded today's talk time data for ${Object.keys(this.todayData).length} agents`);
     } catch (error) {
-      console.log('📄 Creating new daily-talk-time.json file');
-      await this.createDefaultFile();
+      console.log('📄 Starting fresh - no existing daily talk time data');
+      this.todayData = {};
     }
   }
 
-  async createDefaultFile() {
-    const defaultData = {
-      metadata: {
-        version: "1.0",
-        lastUpdated: new Date().toISOString()
-      },
-      dailyData: {}
-    };
-    
-    await this.saveToFile(defaultData);
-    this.data = defaultData;
-  }
-
-  async saveToFile(data = null) {
+  async saveTodayData() {
     try {
-      const dataToSave = data || {
-        ...this.data,
+      // Save only today's data to file (backup)
+      const dataToSave = {
         metadata: {
-          ...this.data.metadata,
-          lastUpdated: new Date().toISOString()
+          version: "2.0",
+          lastUpdated: new Date().toISOString(),
+          date: this.today
+        },
+        dailyData: {
+          [this.today]: this.todayData
         }
       };
 
       await fs.writeFile(this.filePath, JSON.stringify(dataToSave, null, 2), 'utf8');
-      console.log(`💾 Saved daily talk time data`);
     } catch (error) {
-      console.error('❌ Error saving daily talk time data:', error.message);
-      throw error;
+      console.error('❌ Error saving today talk time data:', error.message);
     }
   }
 
   // Update agent's total talk time for today
   async updateAgentTalkTime(agentCode, agentName, totalTalkTimeSeconds, callCount = null) {
     try {
-      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-      
-      // Initialize day if not exists
-      if (!this.data.dailyData[today]) {
-        this.data.dailyData[today] = {};
-      }
-
       // Initialize agent if not exists for today
-      if (!this.data.dailyData[today][agentCode]) {
-        this.data.dailyData[today][agentCode] = {
+      if (!this.todayData[agentCode]) {
+        this.todayData[agentCode] = {
           agentName: agentName,
           totalTalkTime: 0,
           lastUpdated: new Date().toISOString(),
@@ -82,19 +72,20 @@ class DailyTalkTimeManager {
       }
 
       // Update data
-      this.data.dailyData[today][agentCode].totalTalkTime = totalTalkTimeSeconds;
-      this.data.dailyData[today][agentCode].agentName = agentName; // Update in case name changed
-      this.data.dailyData[today][agentCode].lastUpdated = new Date().toISOString();
+      this.todayData[agentCode].totalTalkTime = totalTalkTimeSeconds;
+      this.todayData[agentCode].agentName = agentName; // Update in case name changed
+      this.todayData[agentCode].lastUpdated = new Date().toISOString();
       
       if (callCount !== null) {
-        this.data.dailyData[today][agentCode].callCount = callCount;
+        this.todayData[agentCode].callCount = callCount;
       }
 
-      await this.saveToFile();
+      // Save to file as backup
+      await this.saveTodayData();
       
       console.log(`📊 Updated ${agentCode} total talk time: ${totalTalkTimeSeconds}s (${this.formatDuration(totalTalkTimeSeconds)})`);
       
-      return this.data.dailyData[today][agentCode];
+      return this.todayData[agentCode];
     } catch (error) {
       console.error('❌ Error updating agent talk time:', error.message);
       throw error;
@@ -103,10 +94,7 @@ class DailyTalkTimeManager {
 
   // Get today's talk time for all agents
   getTodayTalkTime() {
-    const today = new Date().toISOString().split('T')[0];
-    const todayData = this.data.dailyData[today] || {};
-    
-    return Object.entries(todayData).map(([agentCode, data]) => ({
+    return Object.entries(this.todayData).map(([agentCode, data]) => ({
       agentCode,
       agentName: data.agentName,
       totalTalkTime: data.totalTalkTime || 0,
@@ -118,47 +106,7 @@ class DailyTalkTimeManager {
 
   // Get specific agent's talk time for today
   getAgentTodayTalkTime(agentCode) {
-    const today = new Date().toISOString().split('T')[0];
-    const todayData = this.data.dailyData[today] || {};
-    return todayData[agentCode] || { totalTalkTime: 0, callCount: 0 };
-  }
-
-  // Get talk time for specific date
-  getDateTalkTime(date) {
-    const dateData = this.data.dailyData[date] || {};
-    
-    return Object.entries(dateData).map(([agentCode, data]) => ({
-      agentCode,
-      agentName: data.agentName,
-      totalTalkTime: data.totalTalkTime || 0,
-      formattedTalkTime: this.formatDuration(data.totalTalkTime || 0),
-      callCount: data.callCount || 0,
-      lastUpdated: data.lastUpdated
-    }));
-  }
-
-  // Get agent history for date range
-  getAgentHistory(agentCode, startDate, endDate) {
-    const history = [];
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    
-    for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
-      const dateStr = date.toISOString().split('T')[0];
-      const dayData = this.data.dailyData[dateStr] || {};
-      const agentData = dayData[agentCode];
-      
-      if (agentData) {
-        history.push({
-          date: dateStr,
-          totalTalkTime: agentData.totalTalkTime || 0,
-          formattedTalkTime: this.formatDuration(agentData.totalTalkTime || 0),
-          callCount: agentData.callCount || 0
-        });
-      }
-    }
-    
-    return history;
+    return this.todayData[agentCode] || { totalTalkTime: 0, callCount: 0 };
   }
 
   formatDuration(seconds) {
@@ -175,36 +123,31 @@ class DailyTalkTimeManager {
     }
   }
 
-  // Get all available dates
-  getAvailableDates() {
-    return Object.keys(this.data.dailyData).sort().reverse(); // Latest first
+  // Check if day has changed and reset data
+  startDayResetChecker() {
+    setInterval(() => {
+      const currentDay = new Date().toISOString().split('T')[0];
+      
+      if (currentDay !== this.today) {
+        console.log(`🌅 New day detected: ${currentDay}. Resetting daily data.`);
+        this.todayData = {};
+        this.today = currentDay;
+        this.saveTodayData();
+      }
+    }, 60000); // Check every minute
   }
 
-  // Cleanup old data (if needed in future)
-  async cleanupOldData(daysToKeep = 1095) { // 3 years default
-    try {
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
-      const cutoffStr = cutoffDate.toISOString().split('T')[0];
-      
-      let removedCount = 0;
-      for (const date of Object.keys(this.data.dailyData)) {
-        if (date < cutoffStr) {
-          delete this.data.dailyData[date];
-          removedCount++;
-        }
-      }
-      
-      if (removedCount > 0) {
-        await this.saveToFile();
-        console.log(`🧹 Cleaned up ${removedCount} old daily records`);
-      }
-      
-      return removedCount;
-    } catch (error) {
-      console.error('❌ Error cleaning up old data:', error.message);
-      return 0;
-    }
+  // Get all agents with current data
+  getAllActiveAgents() {
+    return Object.keys(this.todayData);
+  }
+
+  // Reset for new day (called by server at midnight)
+  async resetForNewDay() {
+    console.log('🌅 Resetting daily talk time for new day');
+    this.todayData = {};
+    this.today = new Date().toISOString().split('T')[0];
+    await this.saveTodayData();
   }
 }
 

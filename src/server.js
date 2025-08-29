@@ -24,6 +24,7 @@ class CallAnalyticsServer {
     });
     
     this.wsManager = null;
+    this.dailyStatsScheduler = null;  // ADD THIS LINE
     this.init();
   }
 
@@ -162,10 +163,10 @@ async start() {
     console.log('🔄 Initializing daily talk time manager...');
     await dailyTalkTimeManager.init();
 
-    // Sync all agents from JSON to PostgreSQL on startup
-    console.log('🔄 Syncing agents from JSON to PostgreSQL...');
-    const agentManager = require('./services/agentManager');
-await agentManager.syncAllAgentsToPostgreSQL();
+    
+
+ // Start daily stats scheduler
+    this.startDailyStatsScheduler();  // ADD THIS LINE
     // Start the server
     this.server.listen(config.server.port, '0.0.0.0', () => {
         console.log('🚀 Call Analytics Server Started');
@@ -187,14 +188,11 @@ await agentManager.syncAllAgentsToPostgreSQL();
     
     while (attempts < maxAttempts) {
       try {
-        // Test database connection
-        await database.pool.query('SELECT 1');
-        
-        // Test redis connection
+        // Test redis connection only (no PostgreSQL)
         const redisHealthy = await redis.ping();
         
         if (redisHealthy) {
-          console.log('✅ All connections ready');
+          console.log('✅ All connections ready (Redis only)');
           return;
         }
       } catch (error) {
@@ -208,10 +206,100 @@ await agentManager.syncAllAgentsToPostgreSQL();
     throw new Error('Failed to establish connections after maximum attempts');
   }
 
+  // Daily stats scheduler - runs at 11:55 PM IST
+  startDailyStatsScheduler() {
+    const scheduleNextRun = () => {
+      const now = new Date();
+      
+      // Convert to IST
+      const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30
+      const istNow = new Date(now.getTime() + istOffset);
+      
+      // Set target time to 11:55 PM IST today
+      const targetTime = new Date(istNow);
+      targetTime.setHours(23, 55, 0, 0);
+      
+      // If target time has already passed today, schedule for tomorrow
+      if (istNow > targetTime) {
+        targetTime.setDate(targetTime.getDate() + 1);
+      }
+      
+      // Convert back to UTC for setTimeout
+      const targetTimeUTC = new Date(targetTime.getTime() - istOffset);
+      const msUntilRun = targetTimeUTC.getTime() - now.getTime();
+      
+      console.log(`📅 Daily stats scheduled for: ${targetTime.toISOString()} IST (in ${Math.round(msUntilRun / 1000 / 60)} minutes)`);
+      
+      this.dailyStatsScheduler = setTimeout(async () => {
+        await this.saveDailyStatsToNocoDB();
+        scheduleNextRun(); // Schedule next day
+      }, msUntilRun);
+    };
+    
+    scheduleNextRun();
+    console.log('✅ Daily stats scheduler started');
+  }
+
+  async saveDailyStatsToNocoDB() {
+    try {
+      console.log('🔄 Starting daily stats save to NocoDB...');
+      
+      const nocodbService = require('./services/nocodbService');
+      const todayTalkTime = dailyTalkTimeManager.getTodayTalkTime();
+      
+      if (todayTalkTime.length === 0) {
+        console.log('⚠️ No talk time data to save today');
+        return;
+      }
+      
+      const today = nocodbService.formatDate(new Date());
+      let savedCount = 0;
+      let errorCount = 0;
+      
+      for (const agent of todayTalkTime) {
+        try {
+          // Only save if agent has some talk time or calls
+          if (agent.totalTalkTime > 0 || agent.callCount > 0) {
+            await nocodbService.addDailyTalktime(
+              agent.agentCode,
+              agent.agentName,
+              today,
+              agent.totalTalkTime,
+              agent.callCount || 0
+            );
+            
+            savedCount++;
+            console.log(`✅ Saved daily stats: ${agent.agentCode} - ${agent.formattedTalkTime}`);
+            
+            // Small delay to prevent rate limiting
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }
+        } catch (error) {
+          errorCount++;
+          console.error(`❌ Failed to save daily stats for ${agent.agentCode}:`, error.message);
+        }
+      }
+      
+      console.log(`📊 Daily stats save completed: ${savedCount} saved, ${errorCount} errors`);
+      
+      // Reset daily talk time for next day (optional - depends on your preference)
+      // await dailyTalkTimeManager.resetForNewDay();
+      
+    } catch (error) {
+      console.error('❌ Error in daily stats save:', error.message);
+    }
+  }
+
   async gracefulShutdown() {
     console.log('🔄 Starting graceful shutdown...');
     
     try {
+      // Clear daily stats scheduler
+      if (this.dailyStatsScheduler) {
+        clearTimeout(this.dailyStatsScheduler);
+        console.log('✅ Daily stats scheduler cleared');
+      }
+
       // Close HTTP server
       this.server.close(() => {
         console.log('✅ HTTP server closed');
