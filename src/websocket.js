@@ -9,6 +9,9 @@ class WebSocketManager {
     this.recentReminders = new Set();
     this.connectedAgents = new Map();
     this.agentIdleStartTimes = new Map(); // Track when agents went idle
+    // NEW: Idle session queue to prevent missing data
+    this.idleSessionQueue = [];
+    this.processingQueue = false;
     this.init();
     this.startReminderSystem();
   }
@@ -397,19 +400,7 @@ async recordIdleSessionToNocoDB(agentCode, agentName) {
   }
 }
 
-// 🎯 NEW: Idle session queue to prevent missing data
-constructor(io) {
-  this.io = io;
-  this.recentReminders = new Set();
-  this.connectedAgents = new Map();
-  this.agentIdleStartTimes = new Map();
-  // ADD THESE NEW PROPERTIES:
-  this.idleSessionQueue = [];
-  this.processingQueue = false;
-  
-  this.init();
-  this.startReminderSystem();
-}
+
 
 // 🎯 NEW: Queue system for idle sessions
 async addIdleSessionToQueue(sessionData) {
@@ -574,61 +565,9 @@ async sendReminderToAgent(agentCode, agentName, minutesIdle, intervalMinutes) {
   }
 }
 
-// Handle reminder acknowledgments from Android app
-async handleReminderAcknowledgment(socket, data) {
-  try {
-    const { agentCode, timestamp, action } = data;
-    
-    console.log(`✅ Reminder acknowledged by ${agentCode} at ${timestamp}`);
-    
-    // Log acknowledgment (could store in database for analytics later)
-    // For now, just log it
-    
-    // Optional: Send confirmation back to app
-    socket.emit('reminder_ack_received', {
-      status: 'acknowledged',
-      timestamp: new Date().toISOString()
-    });
+// Removed from here
 
-  } catch (error) {
-    console.error('❌ Error handling reminder acknowledgment:', error.message);
-  }
-}
-
-async sendReminderToAgent(agentCode, agentName, minutesIdle, intervalMinutes) {
-  try {
-    const socketId = this.connectedAgents.get(agentCode);
-    
-    if (socketId) {
-      // Send to connected agent via WebSocket
-      const reminderData = {
-        action: 'show_reminder',
-        message: `It's been ${minutesIdle} minutes since your last call. Time to make another call!`,
-        idleTime: `${minutesIdle} minutes`,
-        intervalMinutes: intervalMinutes,
-        agentCode: agentCode,
-        agentName: agentName,
-        timestamp: new Date().toISOString()
-      };
-
-      this.io.to(socketId).emit('reminder_trigger', reminderData);
-      
-      console.log(`📱 Reminder sent to ${agentCode} (${agentName}) - ${minutesIdle} minutes idle`);
-      
-      // Store reminder in Redis for tracking
-      await redis.setLastReminderSent(agentCode, new Date().toISOString());
-      
-      return true;
-    } else {
-      console.log(`⚠️ Agent ${agentCode} not connected, reminder not sent`);
-      return false;
-    }
-
-  } catch (error) {
-    console.error(`❌ Error sending reminder to ${agentCode}:`, error.message);
-    return false;
-  }
-}
+// Removed from here
 
 // ADD this entire method after the existing sendReminderToAgent method
 async sendManualReminderToAgent(agentCode, agentName) {
