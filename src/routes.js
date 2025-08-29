@@ -1,24 +1,22 @@
 const express = require('express');
-const database = require('./database');
 const redis = require('./redis');
 const agentManager = require('./services/agentManager');
-const nocodbService = require('./services/nocodbService');
 const dailyTalkTimeManager = require('./services/dailyTalkTimeManager');
+const nocodbService = require('./services/nocodbService');
 const router = express.Router();
 
 
 // Health check endpoint
 router.get('/health', async (req, res) => {
   try {
-    const dbHealth = await database.pool.query('SELECT 1');
     const redisHealth = await redis.ping();
     
     res.json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
       services: {
-        database: dbHealth ? 'connected' : 'disconnected',
-        redis: redisHealth ? 'connected' : 'disconnected'
+        redis: redisHealth ? 'connected' : 'disconnected',
+        nocodb: 'external-api'
       }
     });
   } catch (error) {
@@ -139,7 +137,7 @@ router.get('/agents', async (req, res) => {
       ORDER BY agent_code ASC
     `;
     
-    const result = await database.pool.query(query);
+    // const result = await database.pool.query(query);
     
     res.json({
       success: true,
