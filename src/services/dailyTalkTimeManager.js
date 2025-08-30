@@ -180,6 +180,40 @@ class DailyTalkTimeManager {
     return Object.keys(this.data.dailyData).sort().reverse(); // Latest first
   }
 
+  // Get all agent data for today (used by scheduler)
+  getAllAgentData() {
+    const today = new Date().toISOString().split('T')[0];
+    const todayData = this.data.dailyData[today] || {};
+    
+    const result = {};
+    for (const [agentCode, data] of Object.entries(todayData)) {
+      result[agentCode] = {
+        agentName: data.agentName,
+        totalTalkTime: data.totalTalkTime || 0,
+        totalCalls: data.callCount || 0,
+        lastUpdated: data.lastUpdated
+      };
+    }
+    
+    return result;
+  }
+
+  // Reset all data (used by scheduler after daily upload)
+  resetAllData() {
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Keep historical data, just reset today's data
+    if (this.data.dailyData[today]) {
+      console.log(`🔄 Resetting data for ${Object.keys(this.data.dailyData[today]).length} agents on ${today}`);
+      delete this.data.dailyData[today];
+    }
+  }
+
+  // Force save current data (used by scheduler)
+  async saveData() {
+    await this.saveToFile();
+  }
+
   // Cleanup old data (if needed in future)
   async cleanupOldData(daysToKeep = 1095) { // 3 years default
     try {

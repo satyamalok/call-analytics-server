@@ -6,11 +6,11 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 
 const config = require('../config/config');
-const database = require('./database');
-const redis = require('./redis');
 const routes = require('./routes');
 const WebSocketManager = require('./websocket');
 const dailyTalkTimeManager = require('./services/dailyTalkTimeManager');
+const schedulerService = require('./services/schedulerService');
+const nocodbService = require('./services/nocodbService');
 
 class CallAnalyticsServer {
   constructor() {
@@ -154,18 +154,13 @@ class CallAnalyticsServer {
 
 async start() {
   try {
-    // Wait for database and redis to be ready
-    console.log('🔄 Waiting for database and redis connections...');
-    await this.waitForConnections();
-
     // Initialize daily talk time manager
     console.log('🔄 Initializing daily talk time manager...');
     await dailyTalkTimeManager.init();
 
-    // Sync all agents from JSON to PostgreSQL on startup
-    console.log('🔄 Syncing agents from JSON to PostgreSQL...');
-    const agentManager = require('./services/agentManager');
-await agentManager.syncAllAgentsToPostgreSQL();
+    // Initialize scheduler service
+    console.log('🔄 Initializing scheduler service for daily stats automation...');
+    // Scheduler is already initialized in its constructor, just log
     // Start the server
     this.server.listen(config.server.port, '0.0.0.0', () => {
         console.log('🚀 Call Analytics Server Started');
@@ -181,32 +176,6 @@ await agentManager.syncAllAgentsToPostgreSQL();
     }
   }
 
-  async waitForConnections() {
-    let attempts = 0;
-    const maxAttempts = 30;
-    
-    while (attempts < maxAttempts) {
-      try {
-        // Test database connection
-        await database.pool.query('SELECT 1');
-        
-        // Test redis connection
-        const redisHealthy = await redis.ping();
-        
-        if (redisHealthy) {
-          console.log('✅ All connections ready');
-          return;
-        }
-      } catch (error) {
-        console.log(`🔄 Waiting for connections... (${attempts + 1}/${maxAttempts})`);
-      }
-      
-      attempts++;
-      await new Promise(resolve => setTimeout(resolve, 2000));
-    }
-    
-    throw new Error('Failed to establish connections after maximum attempts');
-  }
 
   async gracefulShutdown() {
     console.log('🔄 Starting graceful shutdown...');
@@ -224,11 +193,11 @@ await agentManager.syncAllAgentsToPostgreSQL();
         });
       }
 
-      // Close database connections
-      await database.cleanup();
-
-      // Close Redis connections
-      await redis.cleanup();
+      // Shutdown scheduler service
+      schedulerService.destroy();
+      
+      // Shutdown NocoDB service (process any remaining queue items)
+      nocodbService.destroy();
 
       console.log('✅ Graceful shutdown completed');
       process.exit(0);

@@ -42,33 +42,64 @@
 
     <!-- Settings Panel -->
 <div class="settings-panel" id="settingsPanel">
-  <div class="settings-header">
-    <h3>⚙️ Agent Reminder Settings</h3>
-    <button id="closeSettings">✕</button>
-  </div>
   <div class="settings-content">
-    <div class="settings-controls">
-      <button id="enableAllReminders" class="btn-success">Enable All</button>
-      <button id="disableAllReminders" class="btn-warning">Disable All</button>
-      <button id="saveAllSettings" class="btn-primary">💾 Save All Changes</button>
+    <div class="settings-header">
+      <h3>👥 Agent Management</h3>
+      <button id="closeSettings" class="close-btn">✕</button>
     </div>
-    <div class="settings-table-container">
-      <table class="settings-table">
+    
+    <div class="settings-controls">
+      <button id="addAgentBtn" class="btn-success">➕ Add Agent</button>
+      <button id="refreshAgentsBtn" class="btn-secondary">🔄 Refresh</button>
+    </div>
+    
+    <!-- Add Agent Form -->
+    <div class="add-agent-form hidden" id="addAgentForm">
+      <div class="form-header">
+        <h4>Add New Agent</h4>
+      </div>
+      <div class="form-group">
+        <label for="newAgentCode">Agent Code</label>
+        <input type="text" id="newAgentCode" placeholder="e.g., AGT001" required maxlength="20">
+        <small>Unique identifier for the agent</small>
+      </div>
+      <div class="form-group">
+        <label for="newAgentName">Agent Name</label>
+        <input type="text" id="newAgentName" placeholder="e.g., John Doe" required maxlength="100">
+        <small>Full name of the agent</small>
+      </div>
+      <div class="form-buttons">
+        <button id="saveNewAgent" class="btn-success">💾 Add Agent</button>
+        <button id="cancelNewAgent" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
+    
+    <!-- Agents Table -->
+    <div class="agents-table-container">
+      <div id="agentsTableEmpty" class="table-empty-state">
+        <div class="empty-icon">👤</div>
+        <h4>No Agents Configured</h4>
+        <p>Add agents to start tracking their performance and call analytics.</p>
+        <button class="btn-success" onclick="document.getElementById('addAgentBtn').click()">➕ Add First Agent</button>
+      </div>
+      
+      <table id="agentsTable" class="agents-table hidden">
         <thead>
           <tr>
             <th>Agent Code</th>
             <th>Agent Name</th>
-            <th>Status</th>
-            <th>Interval (min)</th>
-            <th>Enabled</th>
+            <th>Added</th>
+            <th>Actions</th>
           </tr>
         </thead>
-        <tbody id="settingsTableBody">
-          <tr>
-            <td colspan="5" class="loading">Loading settings...</td>
-          </tr>
+        <tbody id="agentsTableBody">
+          <!-- Dynamic content -->
         </tbody>
       </table>
+    </div>
+    
+    <div class="settings-footer">
+      <small>💡 Tip: Agent codes are used by the mobile app to identify agents during calls.</small>
     </div>
   </div>
 </div>
@@ -253,6 +284,78 @@
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Agent Performance Dashboard Section -->
+  <div class="agent-performance-section">
+    <div class="dashboard-card">
+      <div class="card-header">
+        <h2>📈 Agent Performance Dashboard</h2>
+        <div class="card-badge" id="performanceCount">Select agent & date</div>
+      </div>
+      <div class="card-content">
+        <!-- Agent Performance Filters -->
+        <div class="filter-section">
+          <div class="flex">
+            <div class="flex-1">
+              <label for="performanceAgentSelect">Agent</label>
+              <select id="performanceAgentSelect" required>
+                <option value="">Select Agent</option>
+              </select>
+            </div>
+            
+            <div class="flex-1">
+              <label for="performanceDateMode">Date Mode</label>
+              <select id="performanceDateMode">
+                <option value="single">Single Date</option>
+                <option value="range">Date Range</option>
+              </select>
+            </div>
+            
+            <div class="flex-1" id="singleDateContainer">
+              <label for="performanceDate">Date</label>
+              <input type="date" id="performanceDate">
+            </div>
+            
+            <div class="flex-1 hidden" id="startDateContainer">
+              <label for="performanceStartDate">Start Date</label>
+              <input type="date" id="performanceStartDate">
+            </div>
+            
+            <div class="flex-1 hidden" id="endDateContainer">
+              <label for="performanceEndDate">End Date</label>
+              <input type="date" id="performanceEndDate">
+            </div>
+            
+            <div>
+              <button id="loadPerformanceData" class="filter-btn">
+                Load Data
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Performance Results -->
+        <div id="performanceResults">
+          <!-- Loading State -->
+          <div id="performanceLoading" class="idle-sessions-loading hidden">
+            <div class="spinner"></div>
+            <p>Loading performance data...</p>
+          </div>
+          
+          <!-- Empty State -->
+          <div id="performanceEmpty" class="idle-sessions-empty">
+            <p>Select an agent and date to view performance data.</p>
+          </div>
+          
+          <!-- Performance Data List -->
+          <div id="performanceData" class="hidden">
+            <div class="performance-summary" id="performanceSummary"></div>
+            <div class="performance-list" id="performanceList"></div>
           </div>
         </div>
       </div>

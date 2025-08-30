@@ -778,7 +778,7 @@ function setupEventListeners() {
   if (settingsToggle && settingsPanel) {
     settingsToggle.addEventListener('click', () => {
       settingsPanel.classList.add('show');
-      loadAgentSettings();
+      loadAgentsList();
     });
   }
   
@@ -788,29 +788,29 @@ function setupEventListeners() {
     });
   }
 
-  // Settings panel controls
-  const enableAllBtn = document.getElementById('enableAllReminders');
-  const disableAllBtn = document.getElementById('disableAllReminders');
-  const saveAllBtn = document.getElementById('saveAllSettings');
+  // Agent management controls
+  const addAgentBtn = document.getElementById('addAgentBtn');
+  const refreshAgentsBtn = document.getElementById('refreshAgentsBtn');
+  const saveNewAgent = document.getElementById('saveNewAgent');
+  const cancelNewAgent = document.getElementById('cancelNewAgent');
   
-  if (enableAllBtn) {
-    enableAllBtn.addEventListener('click', () => {
-      document.querySelectorAll('.reminder-checkbox').forEach(checkbox => {
-        checkbox.checked = true;
-      });
+  if (addAgentBtn) {
+    addAgentBtn.addEventListener('click', showAddAgentForm);
+  }
+  
+  if (refreshAgentsBtn) {
+    refreshAgentsBtn.addEventListener('click', () => {
+      showToast('Refreshing agents list...', 'info');
+      loadAgentsList();
     });
   }
   
-  if (disableAllBtn) {
-    disableAllBtn.addEventListener('click', () => {
-      document.querySelectorAll('.reminder-checkbox').forEach(checkbox => {
-        checkbox.checked = false;
-      });
-    });
+  if (saveNewAgent) {
+    saveNewAgent.addEventListener('click', handleAddAgent);
   }
   
-  if (saveAllBtn) {
-    saveAllBtn.addEventListener('click', saveAllAgentSettings);
+  if (cancelNewAgent) {
+    cancelNewAgent.addEventListener('click', hideAddAgentForm);
   }
 
   // Clear debug console
@@ -975,6 +975,9 @@ async function init() {
    
    // Load initial data
    await loadDashboardData();
+   
+   // Initialize performance dashboard
+   performanceDashboard = new AgentPerformanceDashboard();
    
    // 🎯 REMOVED: No more server stats polling
    // Dashboard is now purely event-driven via WebSocket
@@ -1444,6 +1447,449 @@ function cleanup() {
    socket.disconnect();
  }
 }
+
+// 🎯 Agent Performance Dashboard Functions
+class AgentPerformanceDashboard {
+  constructor() {
+    this.init();
+  }
+  
+  init() {
+    this.bindEvents();
+    this.loadAgentOptions();
+  }
+  
+  bindEvents() {
+    const loadBtn = document.getElementById('loadPerformanceData');
+    const dateModeSelect = document.getElementById('performanceDateMode');
+    
+    if (loadBtn) {
+      loadBtn.addEventListener('click', () => this.loadPerformanceData());
+    }
+    
+    if (dateModeSelect) {
+      dateModeSelect.addEventListener('change', (e) => this.toggleDateMode(e.target.value));
+    }
+  }
+  
+  async loadAgentOptions() {
+    try {
+      const response = await fetchAPI('/agents');
+      if (response.success && response.data) {
+        const agentSelect = document.getElementById('performanceAgentSelect');
+        if (agentSelect) {
+          // Clear existing options except the first one
+          agentSelect.innerHTML = '<option value="">Select Agent</option>';
+          
+          response.data.forEach(agent => {
+            const option = document.createElement('option');
+            option.value = agent.agentCode;
+            option.textContent = `${agent.agentCode} - ${agent.agentName}`;
+            agentSelect.appendChild(option);
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error loading agent options:', error);
+    }
+  }
+  
+  toggleDateMode(mode) {
+    const singleDateContainer = document.getElementById('singleDateContainer');
+    const startDateContainer = document.getElementById('startDateContainer');
+    const endDateContainer = document.getElementById('endDateContainer');
+    
+    if (mode === 'single') {
+      singleDateContainer.classList.remove('hidden');
+      startDateContainer.classList.add('hidden');
+      endDateContainer.classList.add('hidden');
+    } else {
+      singleDateContainer.classList.add('hidden');
+      startDateContainer.classList.remove('hidden');
+      endDateContainer.classList.remove('hidden');
+    }
+  }
+  
+  async loadPerformanceData() {
+    const agentCode = document.getElementById('performanceAgentSelect').value;
+    const dateMode = document.getElementById('performanceDateMode').value;
+    
+    if (!agentCode) {
+      showToast('Please select an agent', 'error');
+      return;
+    }
+    
+    let queryParams = '';
+    
+    if (dateMode === 'single') {
+      const date = document.getElementById('performanceDate').value;
+      if (!date) {
+        showToast('Please select a date', 'error');
+        return;
+      }
+      queryParams = `?date=${date}`;
+    } else {
+      const startDate = document.getElementById('performanceStartDate').value;
+      const endDate = document.getElementById('performanceEndDate').value;
+      
+      if (!startDate || !endDate) {
+        showToast('Please select both start and end dates', 'error');
+        return;
+      }
+      
+      if (new Date(startDate) > new Date(endDate)) {
+        showToast('Start date must be before end date', 'error');
+        return;
+      }
+      
+      queryParams = `?start_date=${startDate}&end_date=${endDate}`;
+    }
+    
+    this.showLoading();
+    
+    try {
+      const response = await fetchAPI(`/agent-performance/${agentCode}${queryParams}`);
+      
+      if (response.success) {
+        this.displayPerformanceData(response.data);
+        debugLog(`Performance data loaded: ${response.data.totalRecords} records`);
+      } else {
+        this.showError(response.error || 'Failed to load performance data');
+      }
+    } catch (error) {
+      console.error('Error loading performance data:', error);
+      this.showError('Error loading performance data');
+    }
+  }
+  
+  displayPerformanceData(data) {
+    const { agentCode, dateRange, dailyStats, totalRecords } = data;
+    
+    // Update badge
+    const performanceCount = document.getElementById('performanceCount');
+    if (performanceCount) {
+      performanceCount.textContent = `${totalRecords} day${totalRecords !== 1 ? 's' : ''}`;
+    }
+    
+    // Show data container and hide others
+    this.hideLoading();
+    this.hideEmpty();
+    
+    const dataContainer = document.getElementById('performanceData');
+    if (dataContainer) {
+      dataContainer.classList.remove('hidden');
+      
+      // Generate summary
+      this.renderSummary(agentCode, dateRange, dailyStats);
+      
+      // Generate list
+      this.renderPerformanceList(dailyStats);
+    }
+  }
+  
+  renderSummary(agentCode, dateRange, dailyStats) {
+    const summaryContainer = document.getElementById('performanceSummary');
+    if (!summaryContainer) return;
+    
+    const totalTalktime = dailyStats.reduce((sum, day) => sum + day.talktime, 0);
+    const totalCalls = dailyStats.reduce((sum, day) => sum + day.totalCalls, 0);
+    const avgTalktime = dailyStats.length > 0 ? Math.round(totalTalktime / dailyStats.length) : 0;
+    const avgCalls = dailyStats.length > 0 ? Math.round(totalCalls / dailyStats.length) : 0;
+    
+    summaryContainer.innerHTML = `
+      <h3>${agentCode} - ${dateRange}</h3>
+      <div class="performance-summary-stats">
+        <div class="performance-stat">
+          <div class="performance-stat-label">Total Talktime</div>
+          <div class="performance-stat-value">${Math.floor(totalTalktime / 60)}h ${totalTalktime % 60}m</div>
+        </div>
+        <div class="performance-stat">
+          <div class="performance-stat-label">Total Calls</div>
+          <div class="performance-stat-value">${totalCalls}</div>
+        </div>
+        <div class="performance-stat">
+          <div class="performance-stat-label">Avg Talktime/Day</div>
+          <div class="performance-stat-value">${Math.floor(avgTalktime / 60)}h ${avgTalktime % 60}m</div>
+        </div>
+        <div class="performance-stat">
+          <div class="performance-stat-label">Avg Calls/Day</div>
+          <div class="performance-stat-value">${avgCalls}</div>
+        </div>
+        <div class="performance-stat">
+          <div class="performance-stat-label">Days Tracked</div>
+          <div class="performance-stat-value">${dailyStats.length}</div>
+        </div>
+      </div>
+    `;
+  }
+  
+  renderPerformanceList(dailyStats) {
+    const listContainer = document.getElementById('performanceList');
+    if (!listContainer) return;
+    
+    if (dailyStats.length === 0) {
+      listContainer.innerHTML = '<div class="performance-no-data">No performance data found for the selected period.</div>';
+      return;
+    }
+    
+    const listHtml = dailyStats.map(day => `
+      <div class="performance-item">
+        <div class="performance-item-date">
+          ${new Date(day.date).toLocaleDateString('en-US', { 
+            weekday: 'short', 
+            month: 'short', 
+            day: 'numeric' 
+          })}
+        </div>
+        <div class="performance-item-stats">
+          <div class="performance-item-stat">
+            <div class="performance-item-stat-label">Talktime</div>
+            <div class="performance-item-stat-value talktime">${day.talktimeFormatted}</div>
+          </div>
+          <div class="performance-item-stat">
+            <div class="performance-item-stat-label">Calls</div>
+            <div class="performance-item-stat-value calls">${day.totalCalls}</div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+    
+    listContainer.innerHTML = listHtml;
+  }
+  
+  showLoading() {
+    const loading = document.getElementById('performanceLoading');
+    const empty = document.getElementById('performanceEmpty');
+    const data = document.getElementById('performanceData');
+    
+    if (loading) loading.classList.remove('hidden');
+    if (empty) empty.classList.add('hidden');
+    if (data) data.classList.add('hidden');
+  }
+  
+  hideLoading() {
+    const loading = document.getElementById('performanceLoading');
+    if (loading) loading.classList.add('hidden');
+  }
+  
+  showEmpty() {
+    const empty = document.getElementById('performanceEmpty');
+    if (empty) empty.classList.remove('hidden');
+  }
+  
+  hideEmpty() {
+    const empty = document.getElementById('performanceEmpty');
+    if (empty) empty.classList.add('hidden');
+  }
+  
+  showError(message) {
+    this.hideLoading();
+    this.showEmpty();
+    showToast(message, 'error');
+  }
+}
+
+// Initialize performance dashboard
+let performanceDashboard;
+
+// 🎯 Agent Management Functions (New Simplified UI)
+function showAddAgentForm() {
+  const form = document.getElementById('addAgentForm');
+  if (form) {
+    form.classList.remove('hidden');
+    document.getElementById('newAgentCode').focus();
+  }
+}
+
+function hideAddAgentForm() {
+  const form = document.getElementById('addAgentForm');
+  if (form) {
+    form.classList.add('hidden');
+    // Clear form
+    document.getElementById('newAgentCode').value = '';
+    document.getElementById('newAgentName').value = '';
+  }
+}
+
+async function handleAddAgent() {
+  const agentCode = document.getElementById('newAgentCode').value.trim();
+  const agentName = document.getElementById('newAgentName').value.trim();
+  
+  if (!agentCode || !agentName) {
+    showToast('Please enter both agent code and name', 'error');
+    return;
+  }
+  
+  if (agentCode.length < 2 || agentCode.length > 20) {
+    showToast('Agent code must be 2-20 characters', 'error');
+    return;
+  }
+  
+  if (agentName.length < 2 || agentName.length > 100) {
+    showToast('Agent name must be 2-100 characters', 'error');
+    return;
+  }
+  
+  try {
+    const response = await fetch('/api/agents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentCode, agentName })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      showToast(`Agent ${agentCode} added successfully`, 'success');
+      hideAddAgentForm();
+      loadAgentsList();
+    } else {
+      throw new Error(result.error || 'Failed to add agent');
+    }
+  } catch (error) {
+    console.error('Error adding agent:', error);
+    showToast(error.message || 'Failed to add agent', 'error');
+  }
+}
+
+async function loadAgentsList() {
+  try {
+    const result = await fetchAPI('/agents');
+    if (result.success) {
+      updateAgentsTable(result.data);
+    } else {
+      throw new Error(result.error || 'Failed to load agents');
+    }
+  } catch (error) {
+    console.error('Failed to load agents list:', error);
+    showToast('Failed to load agents list', 'error');
+    showEmptyAgentsTable();
+  }
+}
+
+function updateAgentsTable(agents) {
+  const tableContainer = document.getElementById('agentsTable');
+  const emptyState = document.getElementById('agentsTableEmpty');
+  const tbody = document.getElementById('agentsTableBody');
+  
+  if (!agents || agents.length === 0) {
+    showEmptyAgentsTable();
+    return;
+  }
+  
+  // Hide empty state and show table
+  if (emptyState) emptyState.classList.add('hidden');
+  if (tableContainer) tableContainer.classList.remove('hidden');
+  
+  if (tbody) {
+    tbody.innerHTML = agents.map(agent => `
+      <tr>
+        <td><strong>${agent.agentCode}</strong></td>
+        <td>${agent.agentName}</td>
+        <td>${formatDate(agent.createdAt)}</td>
+        <td>
+          <div class="agent-actions">
+            <button class="action-btn edit-btn" onclick="editAgent('${agent.agentCode}', '${agent.agentName}')">
+              ✏️ Edit
+            </button>
+            <button class="action-btn delete-btn" onclick="deleteAgent('${agent.agentCode}', '${agent.agentName}')">
+              🗑️ Delete
+            </button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  }
+  
+  debugLog(`Updated agents table with ${agents.length} agents`);
+}
+
+function showEmptyAgentsTable() {
+  const tableContainer = document.getElementById('agentsTable');
+  const emptyState = document.getElementById('agentsTableEmpty');
+  
+  if (tableContainer) tableContainer.classList.add('hidden');
+  if (emptyState) emptyState.classList.remove('hidden');
+}
+
+async function editAgent(agentCode, currentName) {
+  const newName = prompt(`Edit agent name for ${agentCode}:`, currentName);
+  
+  if (newName === null) return; // Cancelled
+  
+  if (!newName.trim()) {
+    showToast('Agent name cannot be empty', 'error');
+    return;
+  }
+  
+  if (newName.trim() === currentName) {
+    showToast('No changes made', 'info');
+    return;
+  }
+  
+  try {
+    const response = await fetch(`/api/agents/${agentCode}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentName: newName.trim() })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      showToast(`Agent ${agentCode} updated successfully`, 'success');
+      loadAgentsList();
+    } else {
+      throw new Error(result.error || 'Failed to update agent');
+    }
+  } catch (error) {
+    console.error('Error updating agent:', error);
+    showToast(error.message || 'Failed to update agent', 'error');
+  }
+}
+
+async function deleteAgent(agentCode, agentName) {
+  const confirmed = confirm(`Are you sure you want to delete agent "${agentCode} - ${agentName}"?\n\nThis action cannot be undone.`);
+  
+  if (!confirmed) return;
+  
+  try {
+    const response = await fetch(`/api/agents/${agentCode}`, {
+      method: 'DELETE'
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      showToast(`Agent ${agentCode} deleted successfully`, 'success');
+      loadAgentsList();
+    } else {
+      throw new Error(result.error || 'Failed to delete agent');
+    }
+  } catch (error) {
+    console.error('Error deleting agent:', error);
+    showToast(error.message || 'Failed to delete agent', 'error');
+  }
+}
+
+function formatDate(dateString) {
+  if (!dateString) return 'Unknown';
+  
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  } catch (error) {
+    return 'Unknown';
+  }
+}
+
+// Make functions globally available for HTML onclick handlers
+window.editAgent = editAgent;
+window.deleteAgent = deleteAgent;
 
 // Global error handlers
 window.addEventListener('error', (event) => {

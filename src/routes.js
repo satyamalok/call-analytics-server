@@ -1,23 +1,28 @@
 const express = require('express');
-const database = require('./database');
-const redis = require('./redis');
 const agentManager = require('./services/agentManager');
 const dailyTalkTimeManager = require('./services/dailyTalkTimeManager');
+const nocodbService = require('./services/nocodbService');
 const router = express.Router();
 
 
 // Health check endpoint
 router.get('/health', async (req, res) => {
   try {
-    const dbHealth = await database.pool.query('SELECT 1');
-    const redisHealth = await redis.ping();
+    // Test NocoDB service health
+    const queueStatus = nocodbService.getQueueStatus();
     
     res.json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
+      storage: 'NocoDB (cloud)',
+      queueStatus: {
+        idleSessionsQueue: queueStatus.queueSize,
+        processing: queueStatus.isProcessing
+      },
       services: {
-        database: dbHealth ? 'connected' : 'disconnected',
-        redis: redisHealth ? 'connected' : 'disconnected'
+        scheduler: 'running',
+        agentManager: 'running',
+        dailyTalkTime: 'running'
       }
     });
   } catch (error) {
@@ -154,7 +159,7 @@ router.get('/agents', async (req, res) => {
   }
 });
 
-// 🎯 NEW: Search calls by phone number
+// 🎯 Phone number search using NocoDB
 router.get('/search/phone/:phoneNumber', async (req, res) => {
   try {
     const { phoneNumber } = req.params;
@@ -167,30 +172,33 @@ router.get('/search/phone/:phoneNumber', async (req, res) => {
       });
     }
 
-    const calls = await database.searchCallsByPhoneNumber(phoneNumber, parseInt(limit));
+    console.log(`🔍 Searching calls for phone number: ${phoneNumber}`);
+    const result = await nocodbService.searchByPhoneNumber(phoneNumber, parseInt(limit));
 
     res.json({
       success: true,
       data: {
         phoneNumber,
-        totalResults: calls.length,
-        calls: calls.map(call => ({
-          id: call.id,
-          agentCode: call.agent_code,
-          agentName: call.agent_name || 'Unknown',
-          phoneNumber: call.phone_number,
-          contactName: call.contact_name,
-          callType: call.call_type,
-          talkDuration: call.talk_duration,
-          formattedTalkDuration: formatDuration(call.talk_duration),
-          totalDuration: call.total_duration,
-          callDate: call.call_date,
-          startTime: call.start_time,
-          endTime: call.end_time,
-          createdAt: call.created_at
+        totalResults: result.list.length,
+        calls: result.list.map(call => ({
+          id: call.Id,
+          agentCode: call["Agent Code"],
+          agentName: call["Agent Name"] || 'Unknown',
+          phoneNumber: call.Mobile,
+          contactName: call["Contact Name"],
+          callType: call["Call Type"],
+          talkDuration: parseInt(call["Talk Duration"]) || 0,
+          formattedTalkDuration: formatDuration(parseInt(call["Talk Duration"]) || 0),
+          totalDuration: parseInt(call["Total Duration"]) || 0,
+          callDate: call.Date,
+          startTime: call["Start Time"],
+          endTime: call["End Time"],
+          timestamp: call.Timestamp
         }))
       }
     });
+
+    console.log(`✅ Phone search completed: ${result.list.length} results for ${phoneNumber}`);
 
   } catch (error) {
     console.error('❌ Error searching calls by phone number:', error.message);
@@ -201,112 +209,223 @@ router.get('/search/phone/:phoneNumber', async (req, res) => {
   }
 });
 
-// 🎯 NEW: Get idle sessions for analytics
-// 🎯 ENHANCED: Get idle sessions for analytics with pagination and sorting
+// 🎯 Idle sessions analytics using NocoDB
 router.get('/idle-sessions', async (req, res) => {
   try {
-    const { 
-      agent_code, 
-      start_date, 
-      end_date, 
-      limit = 20, 
-      page = 1,
-      sort = 'start_time',
-      order = 'desc'
-    } = req.query;
-    
-    // Validate sort field
-    const validSortFields = ['agent_code', 'start_time', 'idle_duration'];
-    const sortField = validSortFields.includes(sort) ? sort : 'start_time';
-    const sortOrder = order.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
-    
-    // Calculate offset for pagination
-    const pageNum = parseInt(page) || 1;
-    const limitNum = parseInt(limit) || 20;
-    const offset = (pageNum - 1) * limitNum;
-    
-    // Build query
-    let query = `
-      SELECT * FROM idle_sessions 
-      WHERE 1=1
-    `;
-    const params = [];
-    let paramCount = 0;
+    console.log('🔍 Getting idle sessions from NocoDB with params:', req.query);
+    const result = await nocodbService.getIdleSessionsForAnalytics(req.query);
 
-    if (agent_code) {
-      paramCount++;
-      query += ` AND agent_code = $${paramCount}`;
-      params.push(agent_code);
+    if (result.success) {
+      console.log(`✅ Idle sessions retrieved: ${result.data.idleSessions.length} records`);
+    } else {
+      console.log('⚠️ Failed to get idle sessions from NocoDB');
     }
 
-    if (start_date) {
-      paramCount++;
-      query += ` AND session_date >= $${paramCount}`;
-      params.push(start_date);
-    }
-
-    if (end_date) {
-      paramCount++;
-      query += ` AND session_date <= $${paramCount}`;
-      params.push(end_date);
-    }
-
-    // Add sorting and pagination
-    query += ` ORDER BY ${sortField} ${sortOrder}`;
-    query += ` LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
-    params.push(limitNum, offset);
-
-    // Get total count for pagination
-    let countQuery = `
-      SELECT COUNT(*) as total FROM idle_sessions 
-      WHERE 1=1
-    `;
-    const countParams = [];
-    let countParamCount = 0;
-
-    if (agent_code) {
-      countParamCount++;
-      countQuery += ` AND agent_code = $${countParamCount}`;
-      countParams.push(agent_code);
-    }
-
-    if (start_date) {
-      countParamCount++;
-      countQuery += ` AND session_date >= $${countParamCount}`;
-      countParams.push(start_date);
-    }
-
-    if (end_date) {
-      countParamCount++;
-      countQuery += ` AND session_date <= $${countParamCount}`;
-      countParams.push(end_date);
-    }
-
-    // Execute both queries
-    const [result, countResult] = await Promise.all([
-      database.pool.query(query, params),
-      database.pool.query(countQuery, countParams)
-    ]);
-
-    const totalRecords = parseInt(countResult.rows[0].total);
-    const totalPages = Math.ceil(totalRecords / limitNum);
-
-    res.json({
-      success: true,
-      data: {
-        idleSessions: result.rows.map(session => ({
-          ...session,
-          formattedIdleDuration: formatDuration(session.idle_duration)
-        })),
-        totalRecords,
-        totalPages,
-        currentPage: pageNum,
-        recordsPerPage: limitNum
-      }
-    });
+    res.json(result);
 
   } catch (error) {
     console.error('❌ Error getting idle sessions:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get idle sessions'
+    });
+  }
+});
+
+// 🎯 Agent performance dashboard - get agent stats for date range
+router.get('/agent-performance/:agentCode', async (req, res) => {
+  try {
+    const { agentCode } = req.params;
+    const { start_date, end_date, date } = req.query;
+
+    console.log(`🔍 Getting performance data for agent: ${agentCode}`);
+
+    if (date) {
+      // Single date query
+      const result = await nocodbService.getAgentDailyStats(agentCode, date);
+      const statsArray = result ? [result] : [];
+      
+      res.json({
+        success: true,
+        data: {
+          agentCode,
+          dateRange: date,
+          dailyStats: statsArray.map(stat => ({
+            date: stat.Date,
+            agentName: stat["Agent Name"],
+            talktime: parseInt(stat.Talktime) || 0,
+            talktimeFormatted: nocodbService.formatDuration((parseInt(stat.Talktime) || 0) * 60), // Convert minutes to seconds for formatting
+            totalCalls: parseInt(stat["Total Calls"]) || 0
+          })),
+          totalRecords: statsArray.length
+        }
+      });
+
+    } else if (start_date && end_date) {
+      // Date range query
+      const statsArray = await nocodbService.getAgentStatsDateRange(agentCode, start_date, end_date);
+      
+      res.json({
+        success: true,
+        data: {
+          agentCode,
+          dateRange: `${start_date} to ${end_date}`,
+          dailyStats: statsArray.map(stat => ({
+            date: stat.Date,
+            agentName: stat["Agent Name"],
+            talktime: parseInt(stat.Talktime) || 0,
+            talktimeFormatted: nocodbService.formatDuration((parseInt(stat.Talktime) || 0) * 60),
+            totalCalls: parseInt(stat["Total Calls"]) || 0
+          })),
+          totalRecords: statsArray.length
+        }
+      });
+
+    } else {
+      // No date specified - return error
+      return res.status(400).json({
+        success: false,
+        error: 'Please specify either date or date range (start_date and end_date)'
+      });
+    }
+
+    console.log(`✅ Agent performance data retrieved for ${agentCode}`);
+
+  } catch (error) {
+    console.error('❌ Error getting agent performance:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get agent performance data'
+    });
+  }
+});
+
+// 🎯 Simplified Agent Management API
+router.get('/agents', async (req, res) => {
+  try {
+    const agents = agentManager.getAllAgents();
+    
+    res.json({
+      success: true,
+      data: agents.map(agent => ({
+        agentCode: agent.agentCode,
+        agentName: agent.agentName,
+        createdAt: agent.createdAt,
+        updatedAt: agent.updatedAt
+      }))
+    });
+  } catch (error) {
+    console.error('❌ Error getting agents:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+router.post('/agents', async (req, res) => {
+  try {
+    const { agentCode, agentName } = req.body;
+    
+    if (!agentCode || !agentName) {
+      return res.status(400).json({
+        success: false,
+        error: 'Agent code and name are required'
+      });
+    }
+    
+    if (agentManager.agentExists(agentCode)) {
+      return res.status(409).json({
+        success: false,
+        error: `Agent with code ${agentCode} already exists`
+      });
+    }
+    
+    const newAgent = await agentManager.upsertAgent(agentCode, agentName);
+    
+    res.status(201).json({
+      success: true,
+      data: {
+        agentCode: newAgent.agentCode,
+        agentName: newAgent.agentName,
+        createdAt: newAgent.createdAt
+      },
+      message: `Agent ${agentCode} created successfully`
+    });
+    
+  } catch (error) {
+    console.error('❌ Error creating agent:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+router.put('/agents/:agentCode', async (req, res) => {
+  try {
+    const { agentCode } = req.params;
+    const { agentName } = req.body;
+    
+    if (!agentName) {
+      return res.status(400).json({
+        success: false,
+        error: 'Agent name is required'
+      });
+    }
+    
+    if (!agentManager.agentExists(agentCode)) {
+      return res.status(404).json({
+        success: false,
+        error: `Agent ${agentCode} not found`
+      });
+    }
+    
+    const updatedAgent = await agentManager.updateAgentName(agentCode, agentName);
+    
+    res.json({
+      success: true,
+      data: {
+        agentCode: updatedAgent.agentCode,
+        agentName: updatedAgent.agentName,
+        updatedAt: updatedAgent.updatedAt
+      },
+      message: `Agent ${agentCode} updated successfully`
+    });
+    
+  } catch (error) {
+    console.error('❌ Error updating agent:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+router.delete('/agents/:agentCode', async (req, res) => {
+  try {
+    const { agentCode } = req.params;
+    
+    if (!agentManager.agentExists(agentCode)) {
+      return res.status(404).json({
+        success: false,
+        error: `Agent ${agentCode} not found`
+      });
+    }
+    
+    const success = await agentManager.removeAgent(agentCode);
+    
+    if (success) {
+      res.json({
+        success: true,
+        message: `Agent ${agentCode} deleted successfully`
+      });
+    } else {
+      throw new Error('Failed to delete agent');
+    }
+    
+  } catch (error) {
+    console.error('❌ Error deleting agent:', error.message);
     res.status(500).json({
       success: false,
       error: error.message

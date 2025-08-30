@@ -1,6 +1,5 @@
-const database = require('./database');
-const redis = require('./redis');
 const dailyTalkTimeManager = require('./services/dailyTalkTimeManager');
+const nocodbService = require('./services/nocodbService');
 
 class WebSocketManager {
   constructor(io) {
@@ -8,6 +7,12 @@ class WebSocketManager {
     this.recentReminders = new Set();
     this.connectedAgents = new Map();
     this.agentIdleStartTimes = new Map(); // Track when agents went idle
+    
+    // In-memory state management (replacing Redis)
+    this.agentStatuses = new Map(); // agent status and metadata
+    this.activeCalls = new Map(); // active call information
+    this.lastReminders = new Map(); // last reminder timestamps
+    
     this.init();
     this.startReminderSystem();
   }
@@ -370,17 +375,19 @@ async recordIdleSession(agentCode, agentName) {
       
       // Only record if idle for more than 30 seconds (avoid quick call switches)
       if (idleDurationSeconds > 30) {
-        const sessionData = {
-          agentCode,
-          agentName: agentName || 'Unknown',
-          startTime: idleStartTime.toISOString(),
-          endTime: idleEndTime.toISOString(),
-          idleDuration: idleDurationSeconds,
-          sessionDate: idleStartTime.toISOString().split('T')[0]
-        };
+        const sessionDate = idleStartTime.toISOString().split('T')[0];
+        const startTimeFormatted = nocodbService.formatTimeForIdleSessions(idleStartTime);
         
-        await database.insertIdleSession(sessionData);
-        console.log(`⏱️ Recorded idle session: ${agentCode} - ${idleDurationSeconds}s`);
+        // Queue idle session for NocoDB (prevents data loss during high-frequency updates)
+        nocodbService.queueIdleSession(
+          agentCode,
+          agentName || 'Unknown',
+          sessionDate,
+          startTimeFormatted,
+          idleDurationSeconds
+        );
+        
+        console.log(`⏱️ Queued idle session: ${agentCode} - ${idleDurationSeconds}s`);
       }
       
       // Clear the idle start time
