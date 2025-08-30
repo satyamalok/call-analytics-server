@@ -4,7 +4,8 @@
       "Read(C:\\Users\\satya\\Downloads/**)",
       "Read(C:\\Users\\satya\\Downloads\\call analytics server compose and env\\api details/**)",
       "Bash(npm install:*)",
-      "Bash(npm uninstall:*)"
+      "Bash(npm uninstall:*)",
+      "Bash(npm start)"
     ],
     "deny": [],
     "ask": []

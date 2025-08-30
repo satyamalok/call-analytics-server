@@ -98,14 +98,17 @@ socket.on('send_manual_reminder', async (data) => {
     socket.agentCode = agentCode;
     socket.agentName = agentName;
 
-    // HYBRID: Update JSON (which auto-syncs to PostgreSQL)
+    // Update in-memory status
+    this.agentStatuses.set(agentCode, {
+      status: 'online',
+      agentName,
+      socketId: socket.id,
+      lastUpdate: new Date().toISOString()
+    });
+    
+    // Update agent in JSON storage
     const agentManager = require('./services/agentManager');
-    await agentManager.upsertAgent(agentCode, agentName, 'online');
-      // Update Redis
-      await redis.setAgentStatus(agentCode, 'online', {
-        agentName,
-        socketId: socket.id
-      });
+    await agentManager.addAgent(agentCode, agentName);
 
       socket.emit('agent_status', { status: 'connected', agentCode });
       
@@ -125,11 +128,11 @@ socket.on('send_manual_reminder', async (data) => {
     if (agentCode) {
       console.log(`👤 Agent offline: ${agentCode}`);
 
-      // HYBRID: Update JSON (which auto-syncs to PostgreSQL)
-      const agentManager = require('./services/agentManager');
-      await agentManager.updateAgentStatus(agentCode, 'offline');
-        // Update Redis
-        await redis.setAgentStatus(agentCode, 'offline');
+      // Update in-memory status
+      this.agentStatuses.set(agentCode, {
+        status: 'offline',
+        lastUpdate: new Date().toISOString()
+      });
 
         // Remove from connected agents
         this.connectedAgents.delete(agentCode);
@@ -164,21 +167,21 @@ socket.on('send_manual_reminder', async (data) => {
       console.log(`📞 Call started: ${agentCode} -> ${phoneNumber} (${callType})`);
     }
 
-    // Update agent status to on_call
-    const agentManager = require('./services/agentManager');
-    await agentManager.updateAgentStatus(agentCode, 'on_call');
-
-    // Update Redis with call data
-    await redis.setCallStart(agentCode, {
+    // Update in-memory status
+    const startTime = new Date().toISOString();
+    
+    this.agentStatuses.set(agentCode, {
+      status: 'on_call',
+      agentName: agentName || 'Unknown',
+      currentCall: phoneNumber || 'Unknown',
+      lastUpdate: startTime
+    });
+    
+    this.activeCalls.set(agentCode, {
       phoneNumber: phoneNumber || 'Unknown',
       callType: callType || 'unknown',
       agentName: agentName || 'Unknown',
-      startTime: new Date().toISOString()
-    });
-
-    await redis.setAgentStatus(agentCode, 'on_call', {
-      agentName: agentName || 'Unknown',
-      currentCall: phoneNumber || 'Unknown'
+      startTime: startTime
     });
 
     // Broadcast updated dashboard data
@@ -211,29 +214,20 @@ socket.on('send_manual_reminder', async (data) => {
       console.log(`📊 Updated daily talk time: ${agentCode} = ${todayTotalTalkTime}s`);
     }
 
-    // Insert call into PostgreSQL (for historical storage)
-    await database.insertCall({
-      agentCode,
-      phoneNumber: callData.phoneNumber,
-      contactName: callData.contactName,
-      callType: callData.callType,
-      talkDuration: callData.talkDuration,
-      totalDuration: callData.totalDuration,
-      callDate: callData.callDate || new Date().toISOString().split('T')[0],
-      startTime: callData.startTime,
-      endTime: callData.endTime
-    });
-
-    // Update agent status back to online
-    const agentManager = require('./services/agentManager');
-    await agentManager.updateAgentStatus(agentCode, 'online');
-
-    // Clear active call and set last call end time for idle tracking
-    await redis.setCallEnd(agentCode);
-    await redis.setAgentStatus(agentCode, 'online', {
+    // Note: Call records are now handled by n8n webhooks, not stored locally
+    
+    // Update in-memory status back to online
+    const endTime = new Date().toISOString();
+    
+    this.agentStatuses.set(agentCode, {
+      status: 'online',
       agentName: socket.agentName || callData.agentName,
-      lastCallEnd: new Date().toISOString()
+      lastCallEnd: endTime,
+      lastUpdate: endTime
     });
+    
+    // Clear active call
+    this.activeCalls.delete(agentCode);
 
     // 🎯 NEW: Start tracking idle time
     this.agentIdleStartTimes.set(agentCode, new Date());
@@ -269,11 +263,14 @@ getIdleTrackingStatus() {
       // Stop any active call timer for this agent
       this.stopCallTimer(socket.agentCode);
       
-      // Update agent to offline
-      // HYBRID: Update agent to offline (JSON + auto-sync to PostgreSQL)
-const agentManager = require('./services/agentManager');
-agentManager.updateAgentStatus(socket.agentCode, 'offline').catch(console.error);
-      redis.setAgentStatus(socket.agentCode, 'offline').catch(console.error);
+      // Update in-memory status to offline
+      this.agentStatuses.set(socket.agentCode, {
+        status: 'offline',
+        lastUpdate: new Date().toISOString()
+      });
+      
+      // Clear any active call
+      this.activeCalls.delete(socket.agentCode);
       
       // Remove from connected agents
       this.connectedAgents.delete(socket.agentCode);
@@ -298,9 +295,9 @@ agentManager.updateAgentStatus(socket.agentCode, 'offline').catch(console.error)
     const todayTalkTime = dailyTalkTimeManager.getTodayTalkTime();
     console.log(`📊 Dashboard: Talk time agents: ${todayTalkTime.length}`);
     
-    // Get all agents status from Redis
-    const agentsStatus = await redis.getAllAgentsStatus();
-    const activeCalls = await redis.getAllActiveCalls();
+    // Get all agents status from in-memory storage
+    const agentsStatus = Object.fromEntries(this.agentStatuses);
+    const activeCalls = Object.fromEntries(this.activeCalls);
     console.log(`📊 Dashboard: Active calls: ${Object.keys(activeCalls).length}`);
 
     // Format agents on call (simplified, no timers)
@@ -493,8 +490,8 @@ async sendReminderToAgent(agentCode, agentName, minutesIdle, intervalMinutes) {
       
       console.log(`📱 Reminder sent to ${agentCode} (${agentName}) - ${minutesIdle} minutes idle`);
       
-      // Store reminder in Redis for tracking
-      await redis.setLastReminderSent(agentCode, new Date().toISOString());
+      // Store reminder timestamp in memory
+      this.lastReminders.set(agentCode, new Date().toISOString());
       
       return true;
     } else {
@@ -549,8 +546,8 @@ async sendReminderToAgent(agentCode, agentName, minutesIdle, intervalMinutes) {
       
       console.log(`📱 Reminder sent to ${agentCode} (${agentName}) - ${minutesIdle} minutes idle`);
       
-      // Store reminder in Redis for tracking
-      await redis.setLastReminderSent(agentCode, new Date().toISOString());
+      // Store reminder timestamp in memory
+      this.lastReminders.set(agentCode, new Date().toISOString());
       
       return true;
     } else {

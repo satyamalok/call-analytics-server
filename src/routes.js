@@ -41,11 +41,10 @@ router.get('/dashboard/live', async (req, res) => {
     const agentsTalkTime = dailyTalkTimeManager.getTodayTalkTime();
     console.log(`📊 Dashboard: Found ${agentsTalkTime.length} agents with talk time data`);
     
-    // Get active calls from Redis
-    const activeCalls = await redis.getAllActiveCalls();
-    
-    // Get all agents status from Redis
-    const agentsStatus = await redis.getAllAgentsStatus();
+    // Get active calls and agent status from WebSocket manager's in-memory storage
+    const webSocketManager = req.webSocketManager;
+    const activeCalls = webSocketManager ? Object.fromEntries(webSocketManager.activeCalls) : {};
+    const agentsStatus = webSocketManager ? Object.fromEntries(webSocketManager.agentStatuses) : {};
 
     // Format agents on call (simplified, no timers)
     const agentsOnCall = Object.entries(activeCalls).map(([agentCode, callData]) => ({
@@ -137,17 +136,20 @@ router.get('/agent/:agentCode/history', async (req, res) => {
 // Get all agents list
 router.get('/agents', async (req, res) => {
   try {
-    const query = `
-      SELECT agent_code, agent_name, status, last_seen 
-      FROM agents 
-      ORDER BY agent_code ASC
-    `;
+    const agentManager = require('./services/agentManager');
+    const agents = agentManager.getAllAgents();
     
-    const result = await database.pool.query(query);
+    // Format agents data to match expected structure
+    const formattedAgents = agents.map(agent => ({
+      agent_code: agent.agentCode,
+      agent_name: agent.agentName,
+      status: 'unknown', // Status is now managed in real-time via WebSocket
+      last_seen: null // Not tracked in local storage
+    }));
     
     res.json({
       success: true,
-      data: result.rows
+      data: formattedAgents
     });
 
   } catch (error) {
@@ -669,13 +671,11 @@ router.post('/agents/:agentCode/remove', async (req, res) => {
       });
     }
     
-    // Remove from Redis active agents
-    await redis.setAgentStatus(agentCode, 'removed');
-    
-    // Clear any active call data
-    await redis.setCallEnd(agentCode);
+    // Agent removal is now handled entirely by local JSON storage
+    // Real-time status is managed by WebSocket connections
+    // No Redis cleanup needed
 
-    console.log(`🗑️ Agent ${agentCode} removed from JSON and Redis`);
+    console.log(`🗑️ Agent ${agentCode} removed from JSON storage`);
 
     res.json({
       success: true,
@@ -724,8 +724,8 @@ router.post('/agents/:agentCode/restore', async (req, res) => {
       });
     }
 
-    // Restore agent to offline status (will be online when they connect)
-    await database.updateAgentStatus(agentCode, 'offline');
+    // Agent status is now managed entirely by WebSocket connections
+    // No database status updates needed
     
     console.log(`♻️ Agent ${agentCode} restored to dashboard`);
 

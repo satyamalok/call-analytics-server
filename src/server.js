@@ -29,8 +29,8 @@ class CallAnalyticsServer {
 
   init() {
     this.setupMiddleware();
-    this.setupRoutes();
     this.setupWebSocket();
+    this.setupRoutes();
     this.setupErrorHandling();
   }
 
@@ -74,6 +74,12 @@ class CallAnalyticsServer {
   }
 
   setupRoutes() {
+    // Middleware to pass WebSocket manager to routes
+    this.app.use('/api', (req, res, next) => {
+      req.webSocketManager = this.wsManager;
+      next();
+    });
+    
     // API routes
     this.app.use('/api', routes);
 
