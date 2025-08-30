@@ -161,10 +161,9 @@ class RedisManager {
     if (!this.isConnected) return false;
 
     try {
+      // Only delete the active call - lastCallEnd will be set by setAgentStatus
       await this.client.del(`call:${agentCode}`);
-      
-      // Set last call end time for idle calculation
-      await this.client.hSet(`agent:${agentCode}`, 'lastCallEnd', new Date().toISOString());
+      console.log(`📴 Cleared active call for ${agentCode}`);
       return true;
     } catch (error) {
       console.error('❌ Error setting call end:', error.message);

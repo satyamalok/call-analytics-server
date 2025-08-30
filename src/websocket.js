@@ -231,12 +231,15 @@ await this.recordIdleSessionToNocoDB(agentCode, agentName);
     await agentManager.updateAgentStatus(agentCode, 'online');
 
     // Clear active call and set last call end time for idle tracking
+    const lastCallEndTime = new Date().toISOString();
     await redis.setCallEnd(agentCode);
     await redis.setAgentStatus(agentCode, 'online', {
       agentName: socket.agentName || callData.agentName,
-      lastCallEnd: new Date().toISOString(),
+      lastCallEnd: lastCallEndTime,
       currentCall: null  // Clear current call info
     });
+    
+    console.log(`📊 Agent ${agentCode} status updated: online, lastCallEnd: ${lastCallEndTime}`);
 
     // 🎯 NEW: Start tracking idle time
     this.agentIdleStartTimes.set(agentCode, new Date());
@@ -305,6 +308,10 @@ agentManager.updateAgentStatus(socket.agentCode, 'offline').catch(console.error)
     const agentsStatus = await redis.getAllAgentsStatus();
     const activeCalls = await redis.getAllActiveCalls();
     console.log(`📊 Dashboard: Active calls: ${Object.keys(activeCalls).length}`);
+    console.log(`📊 Dashboard: Active calls data:`, Object.keys(activeCalls));
+    console.log(`📊 Dashboard: Agent statuses:`, Object.keys(agentsStatus).map(code => 
+      `${code}:${agentsStatus[code].status}${agentsStatus[code].lastCallEnd ? ':hasLastCall' : ':noLastCall'}`
+    ));
 
     // Format agents on call (simplified, no timers)
     const agentsOnCall = Object.entries(activeCalls).map(([agentCode, callData]) => ({
