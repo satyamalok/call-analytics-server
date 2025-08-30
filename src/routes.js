@@ -34,6 +34,7 @@ router.get('/health', async (req, res) => {
   }
 });
 
+
 // Get live dashboard data (New: JSON-based talk time)
 router.get('/dashboard/live', async (req, res) => {
   try {
@@ -150,6 +151,17 @@ router.get('/search/phone/:phoneNumber', async (req, res) => {
 
     console.log(`🔍 Searching calls for phone number: ${phoneNumber}`);
     const result = await nocodbService.searchByPhoneNumber(phoneNumber, parseInt(limit));
+    console.log(`🔍 Search result structure:`, {
+      hasResult: !!result,
+      hasList: !!result?.list,
+      listLength: result?.list?.length || 0,
+      listType: typeof result?.list
+    });
+
+    if (!result || !result.list) {
+      console.error('❌ Invalid result structure from NocoDB service');
+      throw new Error('Invalid response from search service');
+    }
 
     res.json({
       success: true,
@@ -181,6 +193,28 @@ router.get('/search/phone/:phoneNumber', async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message
+    });
+  }
+});
+
+// Debug route to test NocoDB service directly
+router.get('/test-nocodb', async (req, res) => {
+  try {
+    console.log('Testing NocoDB service directly from route...');
+    const result = await nocodbService.searchByPhoneNumber('8700', 3);
+    res.json({
+      success: true,
+      message: 'Direct service test',
+      result: result,
+      hasResult: !!result,
+      hasList: !!result?.list,
+      listLength: result?.list?.length || 0
+    });
+  } catch (error) {
+    res.json({
+      success: false,
+      error: error.message,
+      stack: error.stack
     });
   }
 });

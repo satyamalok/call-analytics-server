@@ -1,0 +1,159 @@
+API Details for Table - Call Records. Use this for all the IDs
+
+curl --request GET \
+	--url 'https://db.tsblive.in/api/v2/tables/mp8za08hwm8rxst/records?offset=0&limit=25&where=&viewId=vw3z8uy3w6cbjhnh' \
+	--header 'xc-token: CREATE_YOUR_API_TOKEN_FROM https://db.tsblive.in/dashboard/#/account/tokens'
+
+Sample Output for Table - Call Records
+
+[
+  {
+    "list": [
+      {
+        "Id": 1,
+        "Date": "2025-07-03",
+        "Agent Name": "Prince",
+        "Agent Code": "Agent13",
+        "Contact Name": "Priyanka 18 June (Anmol Mam)",
+        "Mobile": "8700733618",
+        "Call Type": "missed",
+        "Talk Duration": "0",
+        "Total Duration": "29",
+        "Start Time": "14:18:28",
+        "End Time": "14:18:57",
+        "Timestamp": "2025-07-03T08:48:28Z",
+        "Device ID": "TSB_Agent13_1751532538247"
+      },
+      {
+        "Id": 2,
+        "Date": "2025-07-03",
+        "Agent Name": "Suganti",
+        "Agent Code": "Agent11",
+        "Contact Name": null,
+        "Mobile": "9373879523",
+        "Call Type": "outgoing",
+        "Talk Duration": "103",
+        "Total Duration": "116",
+        "Start Time": "15:02:13",
+        "End Time": "15:04:09",
+        "Timestamp": "2025-07-03T09:32:13Z",
+        "Device ID": "TSB_Agent11_1751535279888"
+      },
+      {
+        "Id": 3,
+        "Date": "2025-07-03",
+        "Agent Name": "Himanshi",
+        "Agent Code": "Agent5",
+        "Contact Name": null,
+        "Mobile": "8890175390",
+        "Call Type": "outgoing",
+        "Talk Duration": "206",
+        "Total Duration": "213",
+        "Start Time": "15:01:32",
+        "End Time": "15:05:05",
+        "Timestamp": "2025-07-03T09:31:32Z",
+        "Device ID": "TSB_Agent5_1751535306016"
+      },
+      {
+        "Id": 4,
+        "Date": "2025-07-03",
+        "Agent Name": "Rekha",
+        "Agent Code": "Agent4",
+        "Contact Name": null,
+        "Mobile": "9622319050",
+        "Call Type": "outgoing",
+        "Talk Duration": "0",
+        "Total Duration": "38",
+        "Start Time": "15:04:30",
+        "End Time": "15:05:08",
+        "Timestamp": "2025-07-03T09:34:30Z",
+        "Device ID": "TSB_Agent4_1751535308969"
+      },
+      {
+        "Id": 5,
+        "Date": "2025-07-03",
+        "Agent Name": "Karan",
+        "Agent Code": "Agent12",
+        "Contact Name": null,
+        "Mobile": "9450455968",
+        "Call Type": "outgoing",
+        "Talk Duration": "0",
+        "Total Duration": "1",
+        "Start Time": "15:05:25",
+        "End Time": "15:05:26",
+        "Timestamp": "2025-07-03T09:35:25Z",
+        "Device ID": "TSB_Agent12_1751535326964"
+      }
+    ],
+    "pageInfo": {
+      "totalRows": 44780,
+      "page": 1,
+      "pageSize": 5,
+      "isFirstPage": true,
+      "isLastPage": false
+    }
+  }
+]
+
+API Details for Table - Daily Talktime. Use this for all the IDs
+
+curl --request GET \
+	--url 'https://db.tsblive.in/api/v2/tables/mqw7q3yi3hr32kf/records?offset=0&limit=25&where=&viewId=vwkyuop9h5x05obe' \
+	--header 'xc-token: CREATE_YOUR_API_TOKEN_FROM https://db.tsblive.in/dashboard/#/account/tokens'
+
+Sample Output for Table - Daily Talktime
+
+[
+  {
+    "list": [
+      {
+        "Id": 1,
+        "Date": "2025-08-28",
+        "Agent Name": "Rekha",
+        "Agent Code": "Agent4",
+        "Talktime": "152",
+        "Total Calls": "75"
+      }
+    ],
+    "pageInfo": {
+      "totalRows": 1,
+      "page": 1,
+      "pageSize": 5,
+      "isFirstPage": true,
+      "isLastPage": true
+    }
+  }
+]
+
+
+API Details for Table - Idle Sessions. Use this for all the IDs
+
+curl --request GET \
+	--url 'https://db.tsblive.in/api/v2/tables/me5fh6tz1pm1o4b/records?offset=0&limit=25&where=&viewId=vwcs7uhru2zrupli' \
+	--header 'xc-token: CREATE_YOUR_API_TOKEN_FROM https://db.tsblive.in/dashboard/#/account/tokens'
+
+Sample Output for Table - Idle Sessions
+
+[
+  {
+    "list": [
+      {
+        "Id": 1,
+        "Date": "2025-08-28",
+        "Agent Name": "Rekha",
+        "Agent Code": "Agent4",
+        "Start Time": "11:25 am",
+        "Idle Duration": "180"
+      }
+    ],
+    "pageInfo": {
+      "totalRows": 1,
+      "page": 1,
+      "pageSize": 5,
+      "isFirstPage": true,
+      "isLastPage": true
+    }
+  }
+]
+
+API Token To be used is: FuBOYV-1tJ4QmwSwHMyCx0mF6JJNGcnViRa3oGcy

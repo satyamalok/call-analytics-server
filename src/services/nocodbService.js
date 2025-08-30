@@ -51,7 +51,16 @@ class NocodbService {
       const response = await axios(config);
       return response.data;
     } catch (error) {
-      console.error('❌ NocoDB API Error:', error.response?.data || error.message);
+      console.error('❌ NocoDB API Error:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          params: error.config?.params
+        }
+      });
       throw error;
     }
   }
@@ -96,9 +105,10 @@ class NocodbService {
       }
 
       const response = await this.makeRequest('GET', `/${this.tables.callRecords}/records`, null, params);
-      return response[0] || { list: [], pageInfo: {} };
+      return response || { list: [], pageInfo: {} };
     } catch (error) {
       console.error('❌ Error searching call records:', error.message);
+      console.error('Full error details:', error);
       return { list: [], pageInfo: {} };
     }
   }
@@ -140,7 +150,7 @@ class NocodbService {
       }
 
       const response = await this.makeRequest('GET', `/${this.tables.dailyStats}/records`, null, params);
-      return response[0] || { list: [], pageInfo: {} };
+      return response || { list: [], pageInfo: {} };
     } catch (error) {
       console.error('❌ Error getting daily stats:', error.message);
       return { list: [], pageInfo: {} };
@@ -267,7 +277,7 @@ class NocodbService {
       }
 
       const response = await this.makeRequest('GET', `/${this.tables.idleSessions}/records`, null, params);
-      return response[0] || { list: [], pageInfo: {} };
+      return response || { list: [], pageInfo: {} };
     } catch (error) {
       console.error('❌ Error getting idle sessions:', error.message);
       return { list: [], pageInfo: {} };

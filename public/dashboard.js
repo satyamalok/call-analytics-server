@@ -993,17 +993,7 @@ async function init() {
 }
 
 // Settings Management Functions
-async function loadAgentSettings() {
-  try {
-    const result = await fetchAPI('/reminder-settings');
-    if (result.success) {
-      updateSettingsTable(result.data);
-    }
-  } catch (error) {
-    debugLog('Failed to load agent settings:', error.message);
-    showToast('Failed to load settings', 'error');
-  }
-}
+// Old loadAgentSettings function removed - using loadAgentsList instead
 
 function updateSettingsTable(settings) {
   const tbody = document.getElementById('settingsTableBody');
