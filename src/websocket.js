@@ -108,7 +108,7 @@ socket.on('send_manual_reminder', async (data) => {
     
     // Update agent in JSON storage
     const agentManager = require('./services/agentManager');
-    await agentManager.addAgent(agentCode, agentName);
+    await agentManager.upsertAgent(agentCode, agentName);
 
       socket.emit('agent_status', { status: 'connected', agentCode });
       

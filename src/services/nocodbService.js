@@ -82,9 +82,9 @@ class NocodbService {
       }
       
       if (filters.dateRange && filters.dateRange.start && filters.dateRange.end) {
-        // For date ranges, we'll need multiple API calls or use different approach
-        whereConditions.push(`(Date,gte,${filters.dateRange.start})`);
-        whereConditions.push(`(Date,lte,${filters.dateRange.end})`);
+        // For date ranges, use exactDate syntax
+        whereConditions.push(`(Date,gte,exactDate,${filters.dateRange.start})`);
+        whereConditions.push(`(Date,lte,exactDate,${filters.dateRange.end})`);
       }
 
       if (whereConditions.length > 0) {
@@ -251,11 +251,11 @@ class NocodbService {
       }
 
       if (filters.startDate) {
-        whereConditions.push(`(Date,gte,${filters.startDate})`);
+        whereConditions.push(`(Date,gte,exactDate,${filters.startDate})`);
       }
 
       if (filters.endDate) {
-        whereConditions.push(`(Date,lte,${filters.endDate})`);
+        whereConditions.push(`(Date,lte,exactDate,${filters.endDate})`);
       }
 
       if (whereConditions.length > 0) {
