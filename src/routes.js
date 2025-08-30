@@ -158,28 +158,45 @@ router.get('/search/phone/:phoneNumber', async (req, res) => {
   try {
     const { phoneNumber } = req.params;
 
-    if (!phoneNumber || phoneNumber.length !== 10) {
+    // Clean phone number (remove +91, spaces, hyphens)
+    const cleanPhoneNumber = phoneNumber.replace(/^\+91/, '').replace(/[\s\-()]/g, '');
+    
+    if (!cleanPhoneNumber || cleanPhoneNumber.length !== 10) {
       return res.status(400).json({
         success: false,
-        error: 'Phone number must be exactly 10 digits'
+        error: 'Phone number must be exactly 10 digits (with or without +91)'
       });
     }
 
     // Validate only digits
-    if (!/^\d{10}$/.test(phoneNumber)) {
+    if (!/^\d{10}$/.test(cleanPhoneNumber)) {
       return res.status(400).json({
         success: false,
         error: 'Phone number must contain only digits'
       });
     }
 
-    const result = await nocodbService.searchCallsByPhone(phoneNumber);
-    const calls = result[0]?.list || [];
+    console.log(`🔍 Searching for phone number: ${cleanPhoneNumber}`);
+    const result = await nocodbService.searchCallsByPhone(cleanPhoneNumber);
+    
+    // Handle different NocoDB response formats
+    let calls = [];
+    if (Array.isArray(result)) {
+      calls = result;
+    } else if (result && result.list) {
+      calls = result.list;
+    } else if (result && result[0] && result[0].list) {
+      calls = result[0].list;
+    } else if (result && result.data) {
+      calls = result.data;
+    }
+
+    console.log(`📞 Found ${calls.length} calls for ${cleanPhoneNumber}`);
 
     res.json({
       success: true,
       data: {
-        phoneNumber,
+        phoneNumber: cleanPhoneNumber,
         totalResults: calls.length,
         calls: calls.map(call => ({
           id: call.Id,

@@ -45,8 +45,13 @@ class NocoDBService {
 
   // Search phone number in Call Records
   async searchCallsByPhone(phoneNumber) {
+    console.log(`🔍 NocoDB: Searching for Mobile = ${phoneNumber}`);
     const queryParams = `?where=(Mobile,eq,${phoneNumber})&sort=-Id`;
-    return await this.makeRequest('GET', this.tables.callRecords, null, queryParams);
+    
+    const result = await this.makeRequest('GET', this.tables.callRecords, null, queryParams);
+    console.log(`🔍 NocoDB: Search response structure:`, JSON.stringify(result, null, 2));
+    
+    return result;
   }
 
   // Get idle sessions by agent and/or date
@@ -66,15 +71,17 @@ class NocoDBService {
   }
 
   // Add idle session
-  async addIdleSession(agentCode, agentName, startTime, idleDurationSeconds, date) {
+  async addIdleSession(agentCode, agentName, startTime, endTime, idleDurationSeconds, date) {
     const data = [{
       "Date": date,
       "Agent Name": agentName,
       "Agent Code": agentCode,
       "Start Time": startTime,
+      "End Time": endTime,
       "Idle Duration": idleDurationSeconds.toString()
     }];
     
+    console.log('🔄 Sending idle session data to NocoDB:', JSON.stringify(data, null, 2));
     return await this.makeRequest('POST', this.tables.idleSessions, data);
   }
 

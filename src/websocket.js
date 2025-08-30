@@ -234,7 +234,8 @@ await this.recordIdleSessionToNocoDB(agentCode, agentName);
     await redis.setCallEnd(agentCode);
     await redis.setAgentStatus(agentCode, 'online', {
       agentName: socket.agentName || callData.agentName,
-      lastCallEnd: new Date().toISOString()
+      lastCallEnd: new Date().toISOString(),
+      currentCall: null  // Clear current call info
     });
 
     // 🎯 NEW: Start tracking idle time
@@ -378,13 +379,17 @@ async recordIdleSessionToNocoDB(agentCode, agentName) {
       // Only record if idle for more than 30 seconds (avoid quick call switches)
       if (idleDurationSeconds > 30) {
         const startTimeFormatted = nocodbService.formatTimeAmPm(idleStartTime);
+        const endTimeFormatted = nocodbService.formatTimeAmPm(idleEndTime);
         const dateFormatted = nocodbService.formatDate(idleStartTime);
+        
+        console.log(`⏱️ Recording idle session: ${agentCode}, Duration: ${idleDurationSeconds}s, Date: ${dateFormatted}`);
         
         // Add to queue for processing
         await this.addIdleSessionToQueue({
           agentCode,
           agentName: agentName || 'Unknown',
           startTime: startTimeFormatted,
+          endTime: endTimeFormatted,
           idleDurationSeconds,
           date: dateFormatted
         });
@@ -427,6 +432,7 @@ async processIdleSessionQueue() {
         sessionData.agentCode,
         sessionData.agentName,
         sessionData.startTime,
+        sessionData.endTime,
         sessionData.idleDurationSeconds,
         sessionData.date
       );
