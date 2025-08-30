@@ -1782,10 +1782,27 @@ function updateAgentsTable(agents) {
   if (tableContainer) tableContainer.classList.remove('hidden');
   
   if (tbody) {
-    tbody.innerHTML = agents.map(agent => `
+    tbody.innerHTML = agents.map(agent => {
+      const reminderSettings = agent.reminderSettings || { enabled: false, intervalMinutes: 5 };
+      return `
       <tr>
         <td><strong>${agent.agentCode}</strong></td>
         <td>${agent.agentName}</td>
+        <td>
+          <div class="reminder-toggle">
+            <input type="checkbox" id="reminder-${agent.agentCode}" 
+                   ${reminderSettings.enabled ? 'checked' : ''} 
+                   onchange="updateReminderSettings('${agent.agentCode}', this.checked, null)">
+            <label for="reminder-${agent.agentCode}" class="toggle-label">
+              ${reminderSettings.enabled ? 'Enabled' : 'Disabled'}
+            </label>
+          </div>
+        </td>
+        <td>
+          <input type="number" min="1" max="60" value="${reminderSettings.intervalMinutes}" 
+                 class="interval-input" data-agent="${agent.agentCode}"
+                 onchange="updateReminderSettings('${agent.agentCode}', null, this.value)">
+        </td>
         <td>${formatDate(agent.createdAt)}</td>
         <td>
           <div class="agent-actions">
@@ -1798,7 +1815,8 @@ function updateAgentsTable(agents) {
           </div>
         </td>
       </tr>
-    `).join('');
+      `;
+    }).join('');
   }
   
   debugLog(`Updated agents table with ${agents.length} agents`);
@@ -1869,6 +1887,56 @@ async function deleteAgent(agentCode, agentName) {
   } catch (error) {
     console.error('Error deleting agent:', error);
     showToast(error.message || 'Failed to delete agent', 'error');
+  }
+}
+
+async function updateReminderSettings(agentCode, enabled, intervalMinutes) {
+  try {
+    // Get current values if not provided
+    if (enabled === null) {
+      const checkbox = document.getElementById(`reminder-${agentCode}`);
+      enabled = checkbox ? checkbox.checked : false;
+    }
+    
+    if (intervalMinutes === null) {
+      const input = document.querySelector(`.interval-input[data-agent="${agentCode}"]`);
+      intervalMinutes = input ? parseInt(input.value) : 5;
+    }
+    
+    console.log(`Updating reminder settings for ${agentCode}: enabled=${enabled}, interval=${intervalMinutes}`);
+    
+    const response = await fetchAPI(`/agents/${agentCode}/reminder-settings`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        enabled: enabled,
+        intervalMinutes: parseInt(intervalMinutes)
+      })
+    });
+    
+    if (response.success) {
+      // Update the label text
+      const label = document.querySelector(`label[for="reminder-${agentCode}"]`);
+      if (label) {
+        label.textContent = enabled ? 'Enabled' : 'Disabled';
+      }
+      
+      showToast(`Reminder settings updated for ${agentCode}`, 'success');
+    } else {
+      throw new Error(response.error || 'Failed to update reminder settings');
+    }
+    
+  } catch (error) {
+    console.error('Error updating reminder settings:', error);
+    showToast(error.message || 'Failed to update reminder settings', 'error');
+    
+    // Revert the checkbox state on error
+    const checkbox = document.getElementById(`reminder-${agentCode}`);
+    if (checkbox) {
+      checkbox.checked = !enabled;
+    }
   }
 }
 

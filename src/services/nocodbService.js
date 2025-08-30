@@ -70,7 +70,7 @@ class NocodbService {
       let whereConditions = [];
       
       if (filters.mobile) {
-        whereConditions.push(`(Mobile,eq,${filters.mobile})`);
+        whereConditions.push(`(Mobile,like,%${filters.mobile}%)`);
       }
       
       if (filters.agentCode) {
@@ -292,11 +292,14 @@ class NocodbService {
       const limitNum = parseInt(limit) || 20;
       const offset = (pageNum - 1) * limitNum;
 
-      // Build filters
+      // Build filters - use single date filter instead of range
       const filters = {};
       if (agent_code) filters.agentCode = agent_code;
-      if (start_date) filters.startDate = start_date;
-      if (end_date) filters.endDate = end_date;
+      
+      // Use start_date as the exact date filter (ignore end_date for date ranges)
+      if (start_date) {
+        filters.date = start_date;
+      }
 
       // Build sort parameter
       let sortParam = null;
@@ -314,7 +317,7 @@ class NocodbService {
         sortParam = `${sortOrder}Id`; // Default to ID sort since NocoDB field name sorting can be tricky
       }
 
-      console.log(`🔍 Getting idle sessions: agent=${agent_code}, dates=${start_date}-${end_date}, page=${pageNum}`);
+      console.log(`🔍 Getting idle sessions: agent=${agent_code}, date=${start_date}, page=${pageNum}`);
       
       const result = await this.getIdleSessions(filters, limitNum, offset, sortParam);
 

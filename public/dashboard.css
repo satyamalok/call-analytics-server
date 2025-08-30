@@ -1755,6 +1755,57 @@ input:checked + .toggle-slider:before {
   gap: 0.5rem;
 }
 
+/* Reminder Settings Styles */
+.reminder-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reminder-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.toggle-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.interval-input {
+  width: 60px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.interval-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+}
+
+/* Updated agents table to accommodate new columns */
+.agents-table {
+  min-width: 800px;
+}
+
+.agents-table th:nth-child(3),
+.agents-table th:nth-child(4) {
+  width: 120px;
+  text-align: center;
+}
+
+.agents-table td:nth-child(3),
+.agents-table td:nth-child(4) {
+  text-align: center;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .settings-content {

@@ -82,7 +82,7 @@ router.get('/dashboard/live', async (req, res) => {
     res.json({
       success: true,
       data: {
-        agentsTalkTime: agentsTalkTime.sort((a, b) => a.agentCode.localeCompare(b.agentCode)),
+        agentsTalkTime: agentsTalkTime.sort((a, b) => (b.totalTalkTime || 0) - (a.totalTalkTime || 0)),
         agentsOnCall,
         agentsIdleTime: agentsIdleTime.sort((a, b) => b.minutesSinceLastCall - a.minutesSinceLastCall),
         lastUpdated: new Date().toISOString()
@@ -133,33 +133,7 @@ router.get('/agent/:agentCode/history', async (req, res) => {
   }
 });
 
-// Get all agents list
-router.get('/agents', async (req, res) => {
-  try {
-    const agentManager = require('./services/agentManager');
-    const agents = agentManager.getAllAgents();
-    
-    // Format agents data to match expected structure
-    const formattedAgents = agents.map(agent => ({
-      agent_code: agent.agentCode,
-      agent_name: agent.agentName,
-      status: 'unknown', // Status is now managed in real-time via WebSocket
-      last_seen: null // Not tracked in local storage
-    }));
-    
-    res.json({
-      success: true,
-      data: formattedAgents
-    });
-
-  } catch (error) {
-    console.error('❌ Error getting agents list:', error.message);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
+// Duplicate route removed - using the one at line 306
 
 // 🎯 Phone number search using NocoDB
 router.get('/search/phone/:phoneNumber', async (req, res) => {
@@ -247,6 +221,10 @@ router.get('/agent-performance/:agentCode', async (req, res) => {
       const result = await nocodbService.getAgentDailyStats(agentCode, date);
       const statsArray = result ? [result] : [];
       
+      // Get agent name from local storage as fallback
+      const agentManager = require('./services/agentManager');
+      const localAgentName = agentManager.getAgentName(agentCode) || 'Unknown';
+      
       res.json({
         success: true,
         data: {
@@ -254,7 +232,7 @@ router.get('/agent-performance/:agentCode', async (req, res) => {
           dateRange: date,
           dailyStats: statsArray.map(stat => ({
             date: stat.Date,
-            agentName: stat["Agent Name"],
+            agentName: stat["Agent Name"] || localAgentName,
             talktime: parseInt(stat.Talktime) || 0,
             talktimeFormatted: nocodbService.formatDuration((parseInt(stat.Talktime) || 0) * 60), // Convert minutes to seconds for formatting
             totalCalls: parseInt(stat["Total Calls"]) || 0
@@ -267,6 +245,10 @@ router.get('/agent-performance/:agentCode', async (req, res) => {
       // Date range query
       const statsArray = await nocodbService.getAgentStatsDateRange(agentCode, start_date, end_date);
       
+      // Get agent name from local storage as fallback
+      const agentManager = require('./services/agentManager');
+      const localAgentName = agentManager.getAgentName(agentCode) || 'Unknown';
+      
       res.json({
         success: true,
         data: {
@@ -274,7 +256,7 @@ router.get('/agent-performance/:agentCode', async (req, res) => {
           dateRange: `${start_date} to ${end_date}`,
           dailyStats: statsArray.map(stat => ({
             date: stat.Date,
-            agentName: stat["Agent Name"],
+            agentName: stat["Agent Name"] || localAgentName,
             talktime: parseInt(stat.Talktime) || 0,
             talktimeFormatted: nocodbService.formatDuration((parseInt(stat.Talktime) || 0) * 60),
             totalCalls: parseInt(stat["Total Calls"]) || 0
@@ -428,6 +410,36 @@ router.delete('/agents/:agentCode', async (req, res) => {
     
   } catch (error) {
     console.error('❌ Error deleting agent:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Update agent reminder settings
+router.put('/agents/:agentCode/reminder-settings', async (req, res) => {
+  try {
+    const { agentCode } = req.params;
+    const { enabled, intervalMinutes } = req.body;
+    
+    if (!agentManager.agentExists(agentCode)) {
+      return res.status(404).json({
+        success: false,
+        error: `Agent ${agentCode} not found`
+      });
+    }
+    
+    const updatedAgent = await agentManager.updateReminderSettings(agentCode, enabled, intervalMinutes);
+    
+    res.json({
+      success: true,
+      message: `Reminder settings updated for ${agentCode}`,
+      data: updatedAgent
+    });
+    
+  } catch (error) {
+    console.error('❌ Error updating reminder settings:', error.message);
     res.status(500).json({
       success: false,
       error: error.message

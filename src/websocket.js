@@ -343,7 +343,7 @@ getIdleTrackingStatus() {
     console.log(`📊 Dashboard: Sending ${agentsIdleTime.length} idle agents`);
 
     return {
-      agentsTalkTime: todayTalkTime.sort((a, b) => a.agentCode.localeCompare(b.agentCode)),
+      agentsTalkTime: todayTalkTime.sort((a, b) => (b.totalTalkTime || 0) - (a.totalTalkTime || 0)),
       agentsOnCall,
       agentsIdleTime: agentsIdleTime.sort((a, b) => b.minutesSinceLastCall - a.minutesSinceLastCall),
       lastUpdated: new Date().toISOString()
@@ -405,9 +405,9 @@ async checkAndSendReminders() {
       return; // No agents have reminders enabled
     }
 
-    // Get current idle agents from Redis
-    const agentsStatus = await redis.getAllAgentsStatus();
-    const activeCalls = await redis.getAllActiveCalls();
+    // Get current idle agents from in-memory storage
+    const agentsStatus = Object.fromEntries(this.agentStatuses);
+    const activeCalls = Object.fromEntries(this.activeCalls);
     
     const now = new Date();
 

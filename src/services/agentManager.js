@@ -77,7 +77,11 @@ class AgentManager {
         agentCode,
         agentName,
         createdAt: this.agents[agentCode]?.createdAt || now,
-        updatedAt: now
+        updatedAt: now,
+        reminderSettings: this.agents[agentCode]?.reminderSettings || {
+          enabled: false,
+          intervalMinutes: 5
+        }
       };
 
       await this.saveToFile();
@@ -167,6 +171,37 @@ class AgentManager {
   // Get agent name by code
   getAgentName(agentCode) {
     return this.agents[agentCode]?.agentName || null;
+  }
+
+  // Update reminder settings
+  async updateReminderSettings(agentCode, enabled, intervalMinutes) {
+    try {
+      if (!this.agents[agentCode]) {
+        console.log(`⚠️ Agent ${agentCode} not found for reminder settings update`);
+        return null;
+      }
+
+      this.agents[agentCode].reminderSettings = {
+        enabled: Boolean(enabled),
+        intervalMinutes: parseInt(intervalMinutes) || 5
+      };
+      this.agents[agentCode].updatedAt = new Date().toISOString();
+
+      await this.saveToFile();
+      console.log(`🔔 Updated reminder settings for ${agentCode}: enabled=${enabled}, interval=${intervalMinutes}min`);
+      
+      return this.agents[agentCode];
+    } catch (error) {
+      console.error('❌ Error updating reminder settings:', error.message);
+      throw error;
+    }
+  }
+
+  // Get enabled agents for reminders
+  getEnabledReminderAgents() {
+    return Object.values(this.agents).filter(agent => 
+      agent.reminderSettings && agent.reminderSettings.enabled
+    );
   }
 
 }
