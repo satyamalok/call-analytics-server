@@ -243,13 +243,19 @@ function handleManualReminderResponse(data) {
 // WebSocket Functions
 function initWebSocket() {
   try {
+    // Check if Socket.IO library is loaded
+    if (typeof io === 'undefined') {
+      throw new Error('Socket.IO library not loaded');
+    }
+    
     debugLog('Connecting to WebSocket server...');
     
     socket = io({
       timeout: 10000,
       reconnection: true,
       reconnectionAttempts: maxReconnectAttempts,
-      reconnectionDelay: 2000
+      reconnectionDelay: 2000,
+      forceNew: true
     });
 
     setupWebSocketEvents();
@@ -257,6 +263,7 @@ function initWebSocket() {
   } catch (error) {
     debugLog('Failed to initialize WebSocket:', error.message);
     updateConnectionStatus(false, 'Connection Failed');
+    showToast(`WebSocket initialization failed: ${error.message}`, 'error');
   }
 }
 
@@ -286,9 +293,30 @@ function setupWebSocketEvents() {
   });
 
   socket.on('dashboard_update', (data) => {
-    socket.on('manual_reminder_response', handleManualReminderResponse);
     debugLog('Dashboard update received');
     handleDashboardUpdate(data);
+  });
+
+  // Handle manual reminder response
+  socket.on('manual_reminder_response', handleManualReminderResponse);
+
+  // Handle call updates from reconciliation
+  socket.on('call_update', (data) => {
+    console.log('📞 Call update received:', data);
+    
+    // Update agent's talk time in the dashboard
+    updateAgentTalkTime(data.agentCode, data.talkDuration);
+    
+    // Show reconciliation indicator if data source is 'reconciled'
+    if (data.dataSource === 'reconciled') {
+        showReconciliationNotification(data);
+    }
+  });
+
+  // Handle talk time updates
+  socket.on('talktime_update', (data) => {
+    console.log('📊 Talk time update received:', data);
+    updateAgentTalkTime(data.agentCode, data.talkTime);
   });
 
   socket.on('error', (error) => {
@@ -589,27 +617,7 @@ function formatIdleTime(minutes) {
  }
 }
 
-//step 7
-// ADD these handlers to your existing dashboard.js file
-
-// Handle call updates from reconciliation
-socket.on('call_update', (data) => {
-    console.log('📞 Call update received:', data);
-    
-    // Update agent's talk time in the dashboard
-    updateAgentTalkTime(data.agentCode, data.talkDuration);
-    
-    // Show reconciliation indicator if data source is 'reconciled'
-    if (data.dataSource === 'reconciled') {
-        showReconciliationNotification(data);
-    }
-});
-
-// Handle talk time updates
-socket.on('talktime_update', (data) => {
-    console.log('📊 Talk time update received:', data);
-    updateAgentTalkTime(data.agentCode, data.talkTime);
-});
+// MOVED: These handlers are now properly placed inside setupWebSocketEvents() function
 
 function updateAgentTalkTime(agentCode, additionalTalkTime) {
     const agentRow = document.querySelector(`[data-agent-code="${agentCode}"]`);

@@ -43,6 +43,7 @@ class CallAnalyticsServer {
       defaultSrc: ["'self'"],
       scriptSrc: [
         "'self'", 
+        "'unsafe-inline'",  // Allow inline scripts for dashboard
         "https://cdnjs.cloudflare.com"  // For socket.io CDN
       ],
       styleSrc: ["'self'", "'unsafe-inline'"],  // Allow inline styles
