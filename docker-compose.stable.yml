@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: https://github.com/satyamalok/call-analytics-server.git#nocodb-migration
+      dockerfile: Dockerfile
+    container_name: call-analytics-server
+    restart: on-failure:5  # Only restart on failure, max 5 attempts
+    expose:
+      - "3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - CORS_ORIGIN=*
+      # NocoDB Configuration
+      - NOCODB_API_URL=${NOCODB_API_URL:-https://db.tsblive.in/api/v2/tables}
+      - NOCODB_API_TOKEN=${NOCODB_API_TOKEN:-FuBOYV-1tJ4QmwSwHMyCx0mF6JJNGcnViRa3oGcy}
+      # Table IDs
+      - NOCODB_CALL_RECORDS_TABLE=${NOCODB_CALL_RECORDS_TABLE:-mp8za08hwm8rxst}
+      - NOCODB_DAILY_STATS_TABLE=${NOCODB_DAILY_STATS_TABLE:-mqw7q3yi3hr32kf}
+      - NOCODB_IDLE_SESSIONS_TABLE=${NOCODB_IDLE_SESSIONS_TABLE:-me5fh6tz1pm1o4b}
+      # View IDs
+      - NOCODB_CALL_RECORDS_VIEW=${NOCODB_CALL_RECORDS_VIEW:-vw3z8uy3w6cbjhnh}
+      - NOCODB_DAILY_STATS_VIEW=${NOCODB_DAILY_STATS_VIEW:-vwkyuop9h5x05obe}
+      - NOCODB_IDLE_SESSIONS_VIEW=${NOCODB_IDLE_SESSIONS_VIEW:-vwcs7uhru2zrupli}
+      # Timezone
+      - TZ=Asia/Kolkata
+      # Optional: Logging
+      - LOG_LEVEL=info
+    networks:
+      - proxiable
+    volumes:
+      - app_data:/app/data
+      - app_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "sh", "-c", "netstat -ln | grep :3000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  app_data:
+    driver: local
+  app_logs:
+    driver: local
+
+networks:
+  proxiable:
+    external: true

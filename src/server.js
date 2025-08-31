@@ -139,10 +139,12 @@ class CallAnalyticsServer {
       console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
     });
 
-    // Handle uncaught exceptions
+    // Handle uncaught exceptions - don't exit immediately
     process.on('uncaughtException', (error) => {
       console.error('❌ Uncaught Exception:', error);
-      this.gracefulShutdown();
+      console.error('Stack:', error.stack);
+      // Don't exit immediately - log and continue
+      console.warn('⚠️ Server continuing despite uncaught exception');
     });
 
     // Handle SIGTERM signal
@@ -244,11 +246,18 @@ async start() {
   }
 }
 
-// Create and start the server
+// Create and start the server with better error handling
 const server = new CallAnalyticsServer();
 server.start().catch(error => {
   console.error('❌ Server startup failed:', error);
-  process.exit(1);
+  console.error('Stack:', error.stack);
+  console.warn('⚠️ Attempting to restart server in 5 seconds...');
+  setTimeout(() => {
+    server.start().catch(() => {
+      console.error('❌ Server restart failed, exiting...');
+      process.exit(1);
+    });
+  }, 5000);
 });
 
 // Export for testing purposes
