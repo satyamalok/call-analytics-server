@@ -4,8 +4,8 @@ services:
   app:
     build:
       context: https://github.com/satyamalok/call-analytics-server.git#nocodb-migration
-      dockerfile: Dockerfile
-    container_name: call-analytics-server
+      dockerfile: Dockerfile.no-healthcheck
+    container_name: call-analytics-server-test
     restart: unless-stopped
     expose:
       - "3000"
@@ -33,13 +33,7 @@ services:
     volumes:
       - app_data:/app/data
       - app_logs:/app/logs
-    # Very basic healthcheck - just check if port is listening
-    healthcheck:
-      test: ["CMD", "sh", "-c", "netstat -ln | grep :3000 || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
+    # COMPLETELY NO HEALTHCHECK
 
 volumes:
   app_data:

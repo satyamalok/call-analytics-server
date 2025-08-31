@@ -22,9 +22,6 @@ USER nodejs
 # Expose port
 EXPOSE 3000
 
-# Very basic health check - just check if port 3000 is listening
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
-  CMD netstat -ln | grep :3000 || exit 1
-
+# NO HEALTHCHECK - Completely disabled
 # Start the application
 CMD ["npm", "start"]
