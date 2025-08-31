@@ -22,9 +22,9 @@ USER nodejs
 # Expose port
 EXPOSE 3000
 
-# Health check - simple HTTP check to root endpoint
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => { process.exit(1) })"
+# Health check using dedicated script
+HEALTHCHECK --interval=60s --timeout=30s --start-period=180s --retries=3 \
+  CMD node health-check.js
 
 # Start the application
 CMD ["npm", "start"]
