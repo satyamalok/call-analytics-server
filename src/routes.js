@@ -8,11 +8,20 @@ const router = express.Router();
 // Health check endpoint
 router.get('/health', async (req, res) => {
   try {
-    // Test NocoDB service health
-    const queueStatus = nocodbService.getQueueStatus();
+    // Basic health check - just verify the service is running
+    let queueStatus = { queueSize: 0, isProcessing: false };
+    let serviceStatus = 'partial';
+    
+    try {
+      // Try to get queue status but don't fail if NocoDB is unavailable
+      queueStatus = nocodbService.getQueueStatus();
+      serviceStatus = 'healthy';
+    } catch (nocodbError) {
+      console.warn('⚠️ NocoDB service not available for health check:', nocodbError.message);
+    }
     
     res.json({
-      status: 'healthy',
+      status: serviceStatus,
       timestamp: new Date().toISOString(),
       storage: 'NocoDB (cloud)',
       queueStatus: {
@@ -20,16 +29,26 @@ router.get('/health', async (req, res) => {
         processing: queueStatus.isProcessing
       },
       services: {
+        server: 'running',
         scheduler: 'running',
         agentManager: 'running',
-        dailyTalkTime: 'running'
+        dailyTalkTime: 'running',
+        nocodb: serviceStatus === 'healthy' ? 'connected' : 'disconnected'
       }
     });
   } catch (error) {
+    console.error('❌ Health check error:', error.message);
     res.status(500).json({
       status: 'unhealthy',
       error: error.message,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      services: {
+        server: 'running',
+        scheduler: 'unknown',
+        agentManager: 'unknown',
+        dailyTalkTime: 'unknown',
+        nocodb: 'unknown'
+      }
     });
   }
 });

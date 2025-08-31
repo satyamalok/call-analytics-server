@@ -162,11 +162,22 @@ async start() {
   try {
     // Initialize daily talk time manager
     console.log('🔄 Initializing daily talk time manager...');
-    await dailyTalkTimeManager.init();
+    try {
+      await dailyTalkTimeManager.init();
+      console.log('✅ Daily talk time manager initialized');
+    } catch (error) {
+      console.warn('⚠️ Daily talk time manager initialization failed, continuing with limited functionality:', error.message);
+    }
 
     // Initialize scheduler service
     console.log('🔄 Initializing scheduler service for daily stats automation...');
-    // Scheduler is already initialized in its constructor, just log
+    try {
+      // Scheduler is already initialized in its constructor, just log
+      console.log('✅ Scheduler service initialized');
+    } catch (error) {
+      console.warn('⚠️ Scheduler service initialization failed, continuing without scheduled tasks:', error.message);
+    }
+    
     // Start the server
     this.server.listen(config.server.port, '0.0.0.0', () => {
         console.log('🚀 Call Analytics Server Started');
@@ -178,6 +189,7 @@ async start() {
 
     } catch (error) {
       console.error('❌ Failed to start server:', error.message);
+      console.error('Stack:', error.stack);
       process.exit(1);
     }
   }
