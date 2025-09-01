@@ -796,16 +796,46 @@ function setupEventListeners() {
   // Remove agent functionality moved to settings panel only
 
   // Manual reminder button click handler
-document.addEventListener('click', (e) => {
-  if (e.target.classList.contains('manual-reminder-btn')) {
-    const agentCode = e.target.getAttribute('data-agent-code');
-    const agentName = e.target.getAttribute('data-agent-name');
-    
-    if (agentCode && agentName) {
-      sendManualReminder(agentCode, agentName);
+  document.addEventListener('click', (e) => {
+    if (e.target.classList.contains('manual-reminder-btn')) {
+      const agentCode = e.target.getAttribute('data-agent-code');
+      const agentName = e.target.getAttribute('data-agent-name');
+      
+      if (agentCode && agentName) {
+        sendManualReminder(agentCode, agentName);
+      }
     }
-  }
-});
+  });
+
+  // Settings panel event handlers
+  document.addEventListener('click', (e) => {
+    // Handle save interval button clicks
+    if (e.target.classList.contains('save-interval-btn')) {
+      const agentCode = e.target.getAttribute('data-agent-code');
+      if (agentCode) {
+        saveAgentInterval(agentCode);
+      }
+    }
+    
+    // Handle delete button clicks
+    if (e.target.classList.contains('delete-btn')) {
+      const agentCode = e.target.getAttribute('data-agent-code');
+      const agentName = e.target.getAttribute('data-agent-name');
+      if (agentCode && agentName) {
+        deleteAgent(agentCode, agentName);
+      }
+    }
+  });
+
+  // Handle reminder toggle changes
+  document.addEventListener('change', (e) => {
+    if (e.target.classList.contains('reminder-toggle')) {
+      const agentCode = e.target.getAttribute('data-agent-code');
+      if (agentCode) {
+        updateReminderSettings(agentCode, e.target.checked, null);
+      }
+    }
+  });
 
 // Remove agent functionality is now only available in settings panel
 
@@ -1661,16 +1691,17 @@ function updateAgentsTable(agents) {
           <label class="toggle-switch">
             <input type="checkbox" id="reminder-${agent.agentCode}" 
                    ${reminderSettings.enabled ? 'checked' : ''} 
-                   onchange="updateReminderSettings('${agent.agentCode}', this.checked, null)">
+                   data-agent-code="${agent.agentCode}"
+                   class="reminder-toggle">
             <span class="toggle-slider"></span>
           </label>
         </td>
         <td>
           <div class="interval-container">
             <input type="number" min="1" max="60" value="${reminderSettings.intervalMinutes}" 
-                   class="interval-input" data-agent="${agent.agentCode}" 
+                   class="interval-input" data-agent-code="${agent.agentCode}" 
                    id="interval-${agent.agentCode}">
-            <button class="save-interval-btn" onclick="saveAgentInterval('${agent.agentCode}')" 
+            <button class="save-interval-btn" data-agent-code="${agent.agentCode}" 
                     title="Save interval changes">
               💾 Save
             </button>
@@ -1678,7 +1709,7 @@ function updateAgentsTable(agents) {
         </td>
         <td>${formatDate(agent.createdAt)}</td>
         <td>
-          <button class="action-btn delete-btn" onclick="deleteAgent('${agent.agentCode}', '${agent.agentName}')" 
+          <button class="action-btn delete-btn" data-agent-code="${agent.agentCode}" data-agent-name="${agent.agentName}" 
                   title="Delete agent permanently">
             🗑️ Delete
           </button>
@@ -1813,9 +1844,7 @@ function formatDate(dateString) {
   }
 }
 
-// Make functions globally available for HTML onclick handlers
-window.deleteAgent = deleteAgent;
-window.saveAgentInterval = saveAgentInterval;
+// Functions are now handled via event delegation, no need for global exposure
 
 // Global error handlers
 window.addEventListener('error', (event) => {
