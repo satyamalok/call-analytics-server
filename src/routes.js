@@ -102,8 +102,9 @@ router.get('/dashboard/live', async (req, res) => {
       if (activeCalls[agent.agentCode]) continue;
 
       const agentStatus = agentsStatus[agent.agentCode];
-      // Show agent in idle time if they have a lastCallEnd timestamp (regardless of online status)
+      
       if (agentStatus && agentStatus.lastCallEnd) {
+        // Agent has made calls before - show actual idle time
         const lastCallEnd = new Date(agentStatus.lastCallEnd);
         const minutesSinceLastCall = Math.floor((now - lastCallEnd) / (1000 * 60));
         
@@ -116,6 +117,16 @@ router.get('/dashboard/live', async (req, res) => {
             isOnline: agentStatus.status === 'online'
           });
         }
+      } else {
+        // Agent has no call history or status - show them as "no calls yet"
+        agentsIdleTime.push({
+          agentCode: agent.agentCode,
+          agentName: agent.agentName,
+          minutesSinceLastCall: -1, // Special value for "no calls yet"
+          lastCallEnd: null,
+          isOnline: agentStatus ? agentStatus.status === 'online' : false,
+          noCallsYet: true
+        });
       }
     }
 
@@ -368,7 +379,8 @@ router.get('/agents', async (req, res) => {
         agentCode: agent.agentCode,
         agentName: agent.agentName,
         createdAt: agent.createdAt,
-        updatedAt: agent.updatedAt
+        updatedAt: agent.updatedAt,
+        reminderSettings: agent.reminderSettings || { enabled: true, intervalMinutes: 5 }
       }))
     });
   } catch (error) {

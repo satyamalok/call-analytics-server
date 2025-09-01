@@ -1934,3 +1934,14 @@ input:checked + .toggle-slider:before {
   background: #ccc;
   cursor: not-allowed;
 }
+
+/* No calls yet styling */
+.idle-item.no-calls .time-badge {
+  background-color: #f0f0f0;
+  color: #666;
+  border: 1px dashed #ccc;
+}
+
+.idle-item.no-calls {
+  opacity: 0.8;
+}

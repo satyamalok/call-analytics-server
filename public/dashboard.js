@@ -4,7 +4,7 @@ let dashboardData = {};
 let isConnected = false;
 let reconnectAttempts = 0;
 let maxReconnectAttempts = 5;
-let sortBy = 'totalTalkTime';
+let sortBy = 'talkTime';
 let sortDirection = 'desc';
 
 // Debug logging
@@ -430,8 +430,10 @@ function updateTalkTimeTable(agents) {
         bValue = b.totalTalkTime || 0;
         break;
       default:
-        aValue = a.agentCode.toLowerCase();
-        bValue = b.agentCode.toLowerCase();
+        //aValue = a.agentCode.toLowerCase();
+        //bValue = b.agentCode.toLowerCase();
+        aValue = a.totalTalkTime || 0;  // Default to talkTime
+        bValue = b.totalTalkTime || 0;
     }
 
     let comparison = 0;
@@ -517,22 +519,25 @@ function updateIdleTimeList(agents) {
  });
 
  const items = sortedAgents.map(agent => {
-   const idleTime = formatIdleTime(agent.minutesSinceLastCall);
-   const urgencyClass = getUrgencyClass(agent.minutesSinceLastCall);
+   const isNoCallsYet = agent.noCallsYet || agent.minutesSinceLastCall === -1;
+   const idleTime = isNoCallsYet ? 'No calls yet' : formatIdleTime(agent.minutesSinceLastCall);
+   const urgencyClass = isNoCallsYet ? 'no-calls' : getUrgencyClass(agent.minutesSinceLastCall);
    const onlineStatus = agent.isOnline ? 'online' : 'offline';
    const statusIcon = agent.isOnline ? '🟢' : '🔴';
+   const lastCallText = isNoCallsYet ? 'No calls made yet' : formatLastCallTime(agent.lastCallEnd);
+   const statusText = isNoCallsYet ? 'Waiting for first call' : getIdleStatusText(agent.minutesSinceLastCall);
    
    return `
      <div class="idle-item ${urgencyClass} fade-in" data-agent-code="${agent.agentCode}">
        <div class="agent-info">
          <div class="agent-name">${sanitizeHTML(agent.agentCode)} - ${sanitizeHTML(agent.agentName)} ${statusIcon}</div>
-         <div class="last-call-time">Last call: ${formatLastCallTime(agent.lastCallEnd)}</div>
+         <div class="last-call-time">${lastCallText}</div>
        </div>
        <div class="idle-duration">
-         <span class="time-badge idle-badge ${urgencyClass}" data-minutes="${agent.minutesSinceLastCall}">
+         <span class="time-badge idle-badge ${urgencyClass}" data-minutes="${agent.minutesSinceLastCall || 0}">
            ${idleTime}
          </span>
-         <div class="idle-status">${getIdleStatusText(agent.minutesSinceLastCall)} (${onlineStatus})</div>
+         <div class="idle-status">${statusText} (${onlineStatus})</div>
          <button class="manual-reminder-btn" data-agent-code="${agent.agentCode}" data-agent-name="${agent.agentName}" title="Send notification to agent" ${!agent.isOnline ? 'disabled' : ''}>
            📱 ${agent.isOnline ? 'Notify' : 'Offline'}
          </button>

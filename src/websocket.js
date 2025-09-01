@@ -340,8 +340,9 @@ getIdleTrackingStatus() {
       }
 
       const agentStatus = agentsStatus[agent.agentCode];
-      // Show agent in idle time if they have a lastCallEnd timestamp (regardless of online status)
+      
       if (agentStatus && agentStatus.lastCallEnd) {
+        // Agent has made calls before - show actual idle time
         const lastCallEnd = new Date(agentStatus.lastCallEnd);
         const minutesSinceLastCall = Math.floor((now - lastCallEnd) / (1000 * 60));
         
@@ -353,11 +354,20 @@ getIdleTrackingStatus() {
             agentName: agent.agentName,
             minutesSinceLastCall,
             lastCallEnd: agentStatus.lastCallEnd,
-            isOnline: agentStatus.status === 'online'
+            isOnline: agentStatus ? agentStatus.status === 'online' : false
           });
         }
       } else {
-        console.log(`📊 ${agent.agentCode}: No idle data available (status: ${agentStatus?.status}, lastCallEnd: ${agentStatus?.lastCallEnd})`);
+        // Agent has no call history or status - show them as "no calls yet"
+        console.log(`📊 ${agent.agentCode}: No call history - showing as waiting for first call`);
+        agentsIdleTime.push({
+          agentCode: agent.agentCode,
+          agentName: agent.agentName,
+          minutesSinceLastCall: -1, // Special value for "no calls yet"
+          lastCallEnd: null,
+          isOnline: agentStatus ? agentStatus.status === 'online' : false,
+          noCallsYet: true
+        });
       }
     }
 
