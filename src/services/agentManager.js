@@ -79,7 +79,7 @@ class AgentManager {
         createdAt: this.agents[agentCode]?.createdAt || now,
         updatedAt: now,
         reminderSettings: this.agents[agentCode]?.reminderSettings || {
-          enabled: false,
+          enabled: true,
           intervalMinutes: 5
         }
       };

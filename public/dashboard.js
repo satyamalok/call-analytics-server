@@ -4,7 +4,7 @@ let dashboardData = {};
 let isConnected = false;
 let reconnectAttempts = 0;
 let maxReconnectAttempts = 5;
-let sortBy = 'talkTime';
+let sortBy = 'totalTalkTime';
 let sortDirection = 'desc';
 
 // Debug logging
@@ -1652,36 +1652,36 @@ function updateAgentsTable(agents) {
   
   if (tbody) {
     tbody.innerHTML = agents.map(agent => {
-      const reminderSettings = agent.reminderSettings || { enabled: false, intervalMinutes: 5 };
+      const reminderSettings = agent.reminderSettings || { enabled: true, intervalMinutes: 5 };
       return `
       <tr>
         <td><strong>${agent.agentCode}</strong></td>
         <td>${agent.agentName}</td>
         <td>
-          <div class="reminder-toggle">
+          <label class="toggle-switch">
             <input type="checkbox" id="reminder-${agent.agentCode}" 
                    ${reminderSettings.enabled ? 'checked' : ''} 
                    onchange="updateReminderSettings('${agent.agentCode}', this.checked, null)">
-            <label for="reminder-${agent.agentCode}" class="toggle-label">
-              ${reminderSettings.enabled ? 'Enabled' : 'Disabled'}
-            </label>
-          </div>
+            <span class="toggle-slider"></span>
+          </label>
         </td>
         <td>
-          <input type="number" min="1" max="60" value="${reminderSettings.intervalMinutes}" 
-                 class="interval-input" data-agent="${agent.agentCode}"
-                 onchange="updateReminderSettings('${agent.agentCode}', null, this.value)">
+          <div class="interval-container">
+            <input type="number" min="1" max="60" value="${reminderSettings.intervalMinutes}" 
+                   class="interval-input" data-agent="${agent.agentCode}" 
+                   id="interval-${agent.agentCode}">
+            <button class="save-interval-btn" onclick="saveAgentInterval('${agent.agentCode}')" 
+                    title="Save interval changes">
+              💾 Save
+            </button>
+          </div>
         </td>
         <td>${formatDate(agent.createdAt)}</td>
         <td>
-          <div class="agent-actions">
-            <button class="action-btn edit-btn" onclick="editAgent('${agent.agentCode}', '${agent.agentName}')">
-              ✏️ Edit
-            </button>
-            <button class="action-btn delete-btn" onclick="deleteAgent('${agent.agentCode}', '${agent.agentName}')">
-              🗑️ Delete
-            </button>
-          </div>
+          <button class="action-btn delete-btn" onclick="deleteAgent('${agent.agentCode}', '${agent.agentName}')" 
+                  title="Delete agent permanently">
+            🗑️ Delete
+          </button>
         </td>
       </tr>
       `;
@@ -1699,39 +1699,27 @@ function showEmptyAgentsTable() {
   if (emptyState) emptyState.classList.remove('hidden');
 }
 
-async function editAgent(agentCode, currentName) {
-  const newName = prompt(`Edit agent name for ${agentCode}:`, currentName);
-  
-  if (newName === null) return; // Cancelled
-  
-  if (!newName.trim()) {
-    showToast('Agent name cannot be empty', 'error');
-    return;
-  }
-  
-  if (newName.trim() === currentName) {
-    showToast('No changes made', 'info');
-    return;
-  }
-  
+// Edit agent functionality removed as per requirements
+
+async function saveAgentInterval(agentCode) {
   try {
-    const response = await fetch(`/api/agents/${agentCode}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agentName: newName.trim() })
-    });
+    const intervalInput = document.getElementById(`interval-${agentCode}`);
+    const newInterval = parseInt(intervalInput.value);
     
-    const result = await response.json();
-    
-    if (result.success) {
-      showToast(`Agent ${agentCode} updated successfully`, 'success');
-      loadAgentsList();
-    } else {
-      throw new Error(result.error || 'Failed to update agent');
+    if (!newInterval || newInterval < 1 || newInterval > 60) {
+      showToast('Please enter a valid interval (1-60 minutes)', 'error');
+      return;
     }
+    
+    // Get current toggle state
+    const checkbox = document.getElementById(`reminder-${agentCode}`);
+    const enabled = checkbox ? checkbox.checked : false;
+    
+    await updateReminderSettings(agentCode, enabled, newInterval);
+    
   } catch (error) {
-    console.error('Error updating agent:', error);
-    showToast(error.message || 'Failed to update agent', 'error');
+    console.error('Error saving agent interval:', error);
+    showToast('Failed to save interval changes', 'error');
   }
 }
 
@@ -1793,13 +1781,7 @@ async function updateReminderSettings(agentCode, enabled, intervalMinutes) {
     });
     
     if (response.success) {
-      // Update the label text
-      const label = document.querySelector(`label[for="reminder-${agentCode}"]`);
-      if (label) {
-        label.textContent = enabled ? 'Enabled' : 'Disabled';
-      }
-      
-      showToast(`Reminder settings updated for ${agentCode}`, 'success');
+      showToast(`${enabled ? 'Enabled' : 'Disabled'} notifications for ${agentCode}${intervalMinutes ? ` (${intervalMinutes}min)` : ''}`, 'success');
     } else {
       throw new Error(response.error || 'Failed to update reminder settings');
     }
@@ -1832,8 +1814,8 @@ function formatDate(dateString) {
 }
 
 // Make functions globally available for HTML onclick handlers
-window.editAgent = editAgent;
 window.deleteAgent = deleteAgent;
+window.saveAgentInterval = saveAgentInterval;
 
 // Global error handlers
 window.addEventListener('error', (event) => {
