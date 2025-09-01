@@ -488,7 +488,7 @@ function updateOnCallList(agents) {
          <span class="status-badge on-call">On Call</span>
        </div>
        <div class="compact-line-2">
-         <span class="call-details">Call In Progress | Started: ${startTime}</span>
+         <span class="call-details">Started: ${startTime}</span>
          <span class="phone-number">${phoneNumber}</span>
        </div>
      </div>
