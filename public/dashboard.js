@@ -1794,13 +1794,13 @@ async function updateReminderSettings(agentCode, enabled, intervalMinutes) {
     }
     
     if (intervalMinutes === null) {
-      const input = document.querySelector(`.interval-input[data-agent="${agentCode}"]`);
+      const input = document.querySelector(`.interval-input[data-agent-code="${agentCode}"]`);
       intervalMinutes = input ? parseInt(input.value) : 5;
     }
     
     console.log(`Updating reminder settings for ${agentCode}: enabled=${enabled}, interval=${intervalMinutes}`);
     
-    const response = await fetchAPI(`/agents/${agentCode}/reminder-settings`, {
+    const response = await fetch(`/api/agents/${agentCode}/reminder-settings`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json'
@@ -1811,10 +1811,12 @@ async function updateReminderSettings(agentCode, enabled, intervalMinutes) {
       })
     });
     
-    if (response.success) {
+    const result = await response.json();
+    
+    if (result.success) {
       showToast(`${enabled ? 'Enabled' : 'Disabled'} notifications for ${agentCode}${intervalMinutes ? ` (${intervalMinutes}min)` : ''}`, 'success');
     } else {
-      throw new Error(response.error || 'Failed to update reminder settings');
+      throw new Error(result.error || 'Failed to update reminder settings');
     }
     
   } catch (error) {
