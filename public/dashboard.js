@@ -430,10 +430,9 @@ function updateTalkTimeTable(agents) {
         bValue = b.totalTalkTime || 0;
         break;
       default:
-        //aValue = a.agentCode.toLowerCase();
-        //bValue = b.agentCode.toLowerCase();
-        aValue = a.totalTalkTime || 0;  // Default to talkTime
-        bValue = b.totalTalkTime || 0;
+        aValue = a.agentCode.toLowerCase();
+        bValue = b.agentCode.toLowerCase();
+        
     }
 
     let comparison = 0;
@@ -475,22 +474,22 @@ function updateOnCallList(agents) {
    return timeB - timeA;
  });
 
- // 🎯 NEW: Simplified display without timers
+ // 🎯 NEW: Sleek 2-line compact design
  const items = sortedAgents.map(agent => {
    const phoneNumber = formatPhoneNumber(agent.phoneNumber);
    const callTypeIcon = getCallTypeIcon(agent.callType);
    const startTime = formatTime(agent.callStartTime);
    
    return `
-     <div class="on-call-item fade-in" data-agent-code="${agent.agentCode}">
-       <div class="agent-info">
-         <div class="agent-name">${sanitizeHTML(agent.agentCode)} - ${sanitizeHTML(agent.agentName)}</div>
-         <div class="phone-number">${phoneNumber}</div>
-         <div class="call-type">${callTypeIcon} ${agent.callType}</div>
-       </div>
-       <div class="call-info">
-         <div class="call-start-time">Started: ${startTime}</div>
+     <div class="on-call-item compact fade-in" data-agent-code="${agent.agentCode}">
+       <div class="compact-line-1">
+         <span class="agent-name">${sanitizeHTML(agent.agentCode)} - ${sanitizeHTML(agent.agentName)}</span>
+         <span class="call-type">${callTypeIcon} ${agent.callType}</span>
          <span class="status-badge on-call">On Call</span>
+       </div>
+       <div class="compact-line-2">
+         <span class="call-details">Call In Progress | Started: ${startTime}</span>
+         <span class="phone-number">${phoneNumber}</span>
        </div>
      </div>
    `;
@@ -528,19 +527,19 @@ function updateIdleTimeList(agents) {
    const statusText = isNoCallsYet ? 'Waiting for first call' : getIdleStatusText(agent.minutesSinceLastCall);
    
    return `
-     <div class="idle-item ${urgencyClass} fade-in" data-agent-code="${agent.agentCode}">
-       <div class="agent-info">
-         <div class="agent-name">${sanitizeHTML(agent.agentCode)} - ${sanitizeHTML(agent.agentName)} ${statusIcon}</div>
-         <div class="last-call-time">${lastCallText}</div>
-       </div>
-       <div class="idle-duration">
+     <div class="idle-item compact ${urgencyClass} fade-in" data-agent-code="${agent.agentCode}">
+       <div class="compact-line-1">
+         <span class="agent-name">${sanitizeHTML(agent.agentCode)} - ${sanitizeHTML(agent.agentName)} ${statusIcon}</span>
          <span class="time-badge idle-badge ${urgencyClass}" data-minutes="${agent.minutesSinceLastCall || 0}">
            ${idleTime}
          </span>
-         <div class="idle-status">${statusText} (${onlineStatus})</div>
          <button class="manual-reminder-btn" data-agent-code="${agent.agentCode}" data-agent-name="${agent.agentName}" title="Send notification to agent" ${!agent.isOnline ? 'disabled' : ''}>
            📱 ${agent.isOnline ? 'Notify' : 'Offline'}
          </button>
+       </div>
+       <div class="compact-line-2">
+         <span class="last-call-info">${lastCallText}</span>
+         <span class="idle-status">${statusText} (${onlineStatus})</span>
        </div>
      </div>
    `;
