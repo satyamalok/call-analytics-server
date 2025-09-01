@@ -291,9 +291,28 @@ getIdleTrackingStatus() {
 
   async getDashboardData() {
   try {
-    // 🎯 NEW: Get today's talk time from JSON storage
+    // 🎯 NEW: Get ALL agents from JSON storage, then merge with today's talk time
+    const agentManager = require('./services/agentManager');
+    const allAgents = agentManager.getAllAgents();
     const todayTalkTime = dailyTalkTimeManager.getTodayTalkTime();
-    console.log(`📊 Dashboard: Talk time agents: ${todayTalkTime.length}`);
+    
+    // Create a map of today's talk time data for quick lookup
+    const todayTalkTimeMap = {};
+    todayTalkTime.forEach(agent => {
+      todayTalkTimeMap[agent.agentCode] = agent;
+    });
+    
+    // Create comprehensive agent list showing ALL agents in JSON
+    const agentsTalkTime = allAgents.map(agent => ({
+      agentCode: agent.agentCode,
+      agentName: agent.agentName,
+      totalTalkTime: todayTalkTimeMap[agent.agentCode]?.totalTalkTime || 0,
+      formattedTalkTime: todayTalkTimeMap[agent.agentCode]?.formattedTalkTime || '0s',
+      callCount: todayTalkTimeMap[agent.agentCode]?.callCount || 0,
+      lastUpdated: todayTalkTimeMap[agent.agentCode]?.lastUpdated || null
+    }));
+    
+    console.log(`📊 Dashboard: Showing ${allAgents.length} total agents (${todayTalkTime.length} have talk time today)`);
     
     // Get all agents status from in-memory storage
     const agentsStatus = Object.fromEntries(this.agentStatuses);
@@ -309,11 +328,11 @@ getIdleTrackingStatus() {
       callType: callData.callType
     }));
 
-    // Calculate idle times for agents not on call
+    // Calculate idle times for ALL agents (not just those with talk time today)
     const agentsIdleTime = [];
     const now = new Date();
 
-    for (const agent of todayTalkTime) {
+    for (const agent of allAgents) {
       // Skip if agent is currently on call
       if (activeCalls[agent.agentCode]) {
         console.log(`📊 ${agent.agentCode} is on call, skipping idle calculation`);
@@ -321,18 +340,20 @@ getIdleTrackingStatus() {
       }
 
       const agentStatus = agentsStatus[agent.agentCode];
-      if (agentStatus && agentStatus.status === 'online' && agentStatus.lastCallEnd) {
+      // Show agent in idle time if they have a lastCallEnd timestamp (regardless of online status)
+      if (agentStatus && agentStatus.lastCallEnd) {
         const lastCallEnd = new Date(agentStatus.lastCallEnd);
         const minutesSinceLastCall = Math.floor((now - lastCallEnd) / (1000 * 60));
         
-        console.log(`📊 ${agent.agentCode}: Last call ${minutesSinceLastCall} minutes ago`);
+        console.log(`📊 ${agent.agentCode}: Last call ${minutesSinceLastCall} minutes ago (status: ${agentStatus.status})`);
         
         if (minutesSinceLastCall >= 0) {
           agentsIdleTime.push({
             agentCode: agent.agentCode,
             agentName: agent.agentName,
             minutesSinceLastCall,
-            lastCallEnd: agentStatus.lastCallEnd
+            lastCallEnd: agentStatus.lastCallEnd,
+            isOnline: agentStatus.status === 'online'
           });
         }
       } else {
@@ -343,7 +364,7 @@ getIdleTrackingStatus() {
     console.log(`📊 Dashboard: Sending ${agentsIdleTime.length} idle agents`);
 
     return {
-      agentsTalkTime: todayTalkTime.sort((a, b) => (b.totalTalkTime || 0) - (a.totalTalkTime || 0)),
+      agentsTalkTime: agentsTalkTime.sort((a, b) => (b.totalTalkTime || 0) - (a.totalTalkTime || 0)),
       agentsOnCall,
       agentsIdleTime: agentsIdleTime.sort((a, b) => b.minutesSinceLastCall - a.minutesSinceLastCall),
       lastUpdated: new Date().toISOString()

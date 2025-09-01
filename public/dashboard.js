@@ -4,8 +4,8 @@ let dashboardData = {};
 let isConnected = false;
 let reconnectAttempts = 0;
 let maxReconnectAttempts = 5;
-let sortBy = 'agentCode';
-let sortDirection = 'asc';
+let sortBy = 'talkTime';
+let sortDirection = 'desc';
 
 // Debug logging
 function debugLog(message, data = null) {
@@ -163,31 +163,7 @@ async function fetchAPI(endpoint) {
   }
 }
 
-async function removeAgent(agentCode) {
-  if (!confirm(`Are you sure you want to remove ${agentCode} from the dashboard?\n\nThis will hide the agent but preserve their call history.`)) {
-    return;
-  }
-
-  try {
-    const response = await fetch(`/api/agents/${agentCode}/remove`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    });
-    
-    const data = await response.json();
-    
-    if (data.success) {
-      showToast(`Agent ${agentCode} removed from dashboard`, 'success');
-      loadDashboardData(); // Refresh data
-    } else {
-      throw new Error(data.error || 'Failed to remove agent');
-    }
-
-  } catch (error) {
-    showToast(`Failed to remove agent: ${error.message}`, 'error');
-    debugLog(`Error removing agent ${agentCode}:`, error.message);
-  }
-}
+// removeAgent function moved to deleteAgent in settings section
 
 // NEW: Send manual reminder to agent
 async function sendManualReminder(agentCode, agentName) {
@@ -436,7 +412,7 @@ function updateTalkTimeTable(agents) {
   if (!tbody) return;
 
   if (!agents || agents.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="no-data">📭 No agents found</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="3" class="no-data">📭 No agents found</td></tr>';
     return;
   }
 
@@ -470,16 +446,6 @@ function updateTalkTimeTable(agents) {
       <td><strong>${sanitizeHTML(agent.agentCode)}</strong></td>
       <td>${sanitizeHTML(agent.agentName)}</td>
       <td><span class="talk-time-value">${agent.formattedTalkTime}</span></td>
-      <td><span class="call-count">${agent.callCount || 0}</span></td>
-      <td>
-        <button 
-  class="remove-agent-btn" 
-  data-agent-code="${agent.agentCode}"
-  title="Remove agent from dashboard"
-  aria-label="Remove ${agent.agentCode}">
-  ❌
-</button>
-      </td>
     </tr>
   `).join('');
 
@@ -553,20 +519,22 @@ function updateIdleTimeList(agents) {
  const items = sortedAgents.map(agent => {
    const idleTime = formatIdleTime(agent.minutesSinceLastCall);
    const urgencyClass = getUrgencyClass(agent.minutesSinceLastCall);
+   const onlineStatus = agent.isOnline ? 'online' : 'offline';
+   const statusIcon = agent.isOnline ? '🟢' : '🔴';
    
    return `
      <div class="idle-item ${urgencyClass} fade-in" data-agent-code="${agent.agentCode}">
        <div class="agent-info">
-         <div class="agent-name">${sanitizeHTML(agent.agentCode)} - ${sanitizeHTML(agent.agentName)}</div>
+         <div class="agent-name">${sanitizeHTML(agent.agentCode)} - ${sanitizeHTML(agent.agentName)} ${statusIcon}</div>
          <div class="last-call-time">Last call: ${formatLastCallTime(agent.lastCallEnd)}</div>
        </div>
        <div class="idle-duration">
          <span class="time-badge idle-badge ${urgencyClass}" data-minutes="${agent.minutesSinceLastCall}">
            ${idleTime}
          </span>
-         <div class="idle-status">${getIdleStatusText(agent.minutesSinceLastCall)}</div>
-         <button class="manual-reminder-btn" data-agent-code="${agent.agentCode}" data-agent-name="${agent.agentName}" title="Send notification to agent">
-           📱 Notify
+         <div class="idle-status">${getIdleStatusText(agent.minutesSinceLastCall)} (${onlineStatus})</div>
+         <button class="manual-reminder-btn" data-agent-code="${agent.agentCode}" data-agent-name="${agent.agentName}" title="Send notification to agent" ${!agent.isOnline ? 'disabled' : ''}>
+           📱 ${agent.isOnline ? 'Notify' : 'Offline'}
          </button>
        </div>
      </div>
@@ -789,28 +757,13 @@ function setupEventListeners() {
   }
 
   // Agent management controls
-  const addAgentBtn = document.getElementById('addAgentBtn');
   const refreshAgentsBtn = document.getElementById('refreshAgentsBtn');
-  const saveNewAgent = document.getElementById('saveNewAgent');
-  const cancelNewAgent = document.getElementById('cancelNewAgent');
-  
-  if (addAgentBtn) {
-    addAgentBtn.addEventListener('click', showAddAgentForm);
-  }
   
   if (refreshAgentsBtn) {
     refreshAgentsBtn.addEventListener('click', () => {
       showToast('Refreshing agents list...', 'info');
       loadAgentsList();
     });
-  }
-  
-  if (saveNewAgent) {
-    saveNewAgent.addEventListener('click', handleAddAgent);
-  }
-  
-  if (cancelNewAgent) {
-    cancelNewAgent.addEventListener('click', hideAddAgentForm);
   }
 
   // Clear debug console
@@ -840,15 +793,7 @@ function setupEventListeners() {
     });
   }
 
-  // Event delegation for remove agent buttons
-  document.addEventListener('click', (e) => {
-    if (e.target.classList.contains('remove-agent-btn')) {
-      const agentCode = e.target.getAttribute('data-agent-code');
-      if (agentCode) {
-        removeAgent(agentCode);
-      }
-    }
-  });
+  // Remove agent functionality moved to settings panel only
 
   // Manual reminder button click handler
 document.addEventListener('click', (e) => {
@@ -862,16 +807,7 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// Remove agent button click handler
-document.addEventListener('click', (e) => {
-  if (e.target.classList.contains('remove-agent-btn')) {
-    const agentCode = e.target.getAttribute('data-agent-code');
-    
-    if (agentCode) {
-      removeAgent(agentCode);
-    }
-  }
-});
+// Remove agent functionality is now only available in settings panel
 
   // Window events
   window.addEventListener('beforeunload', cleanup);
@@ -1682,65 +1618,8 @@ class AgentPerformanceDashboard {
 // Initialize performance dashboard
 let performanceDashboard;
 
-// 🎯 Agent Management Functions (New Simplified UI)
-function showAddAgentForm() {
-  const form = document.getElementById('addAgentForm');
-  if (form) {
-    form.classList.remove('hidden');
-    document.getElementById('newAgentCode').focus();
-  }
-}
-
-function hideAddAgentForm() {
-  const form = document.getElementById('addAgentForm');
-  if (form) {
-    form.classList.add('hidden');
-    // Clear form
-    document.getElementById('newAgentCode').value = '';
-    document.getElementById('newAgentName').value = '';
-  }
-}
-
-async function handleAddAgent() {
-  const agentCode = document.getElementById('newAgentCode').value.trim();
-  const agentName = document.getElementById('newAgentName').value.trim();
-  
-  if (!agentCode || !agentName) {
-    showToast('Please enter both agent code and name', 'error');
-    return;
-  }
-  
-  if (agentCode.length < 2 || agentCode.length > 20) {
-    showToast('Agent code must be 2-20 characters', 'error');
-    return;
-  }
-  
-  if (agentName.length < 2 || agentName.length > 100) {
-    showToast('Agent name must be 2-100 characters', 'error');
-    return;
-  }
-  
-  try {
-    const response = await fetch('/api/agents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agentCode, agentName })
-    });
-    
-    const result = await response.json();
-    
-    if (result.success) {
-      showToast(`Agent ${agentCode} added successfully`, 'success');
-      hideAddAgentForm();
-      loadAgentsList();
-    } else {
-      throw new Error(result.error || 'Failed to add agent');
-    }
-  } catch (error) {
-    console.error('Error adding agent:', error);
-    showToast(error.message || 'Failed to add agent', 'error');
-  }
-}
+// 🎯 Agent Management Functions (Simplified - Auto-Add Only)
+// Manual agent addition removed - agents are now added automatically via WebSocket connection
 
 async function loadAgentsList() {
   try {
@@ -1857,7 +1736,7 @@ async function editAgent(agentCode, currentName) {
 }
 
 async function deleteAgent(agentCode, agentName) {
-  const confirmed = confirm(`Are you sure you want to delete agent "${agentCode} - ${agentName}"?\n\nThis action cannot be undone.`);
+  const confirmed = confirm(`Are you sure you want to delete agent "${agentCode} - ${agentName}"?\n\nThis will remove them from all dashboard sections immediately.\n\nTheir call history will remain intact. If they reconnect through the mobile app, they will be automatically re-added.`);
   
   if (!confirmed) return;
   
@@ -1870,7 +1749,14 @@ async function deleteAgent(agentCode, agentName) {
     
     if (result.success) {
       showToast(`Agent ${agentCode} deleted successfully`, 'success');
+      
+      // Refresh agents list in settings
       loadAgentsList();
+      
+      // Refresh dashboard data to immediately remove from all sections
+      loadDashboardData();
+      
+      debugLog(`Agent ${agentCode} deleted and removed from all dashboard sections`);
     } else {
       throw new Error(result.error || 'Failed to delete agent');
     }

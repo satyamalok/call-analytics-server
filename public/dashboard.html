@@ -49,38 +49,17 @@
     </div>
     
     <div class="settings-controls">
-      <button id="addAgentBtn" class="btn-success">➕ Add Agent</button>
       <button id="refreshAgentsBtn" class="btn-secondary">🔄 Refresh</button>
-    </div>
-    
-    <!-- Add Agent Form -->
-    <div class="add-agent-form hidden" id="addAgentForm">
-      <div class="form-header">
-        <h4>Add New Agent</h4>
-      </div>
-      <div class="form-group">
-        <label for="newAgentCode">Agent Code</label>
-        <input type="text" id="newAgentCode" placeholder="e.g., AGT001" required maxlength="20">
-        <small>Unique identifier for the agent</small>
-      </div>
-      <div class="form-group">
-        <label for="newAgentName">Agent Name</label>
-        <input type="text" id="newAgentName" placeholder="e.g., John Doe" required maxlength="100">
-        <small>Full name of the agent</small>
-      </div>
-      <div class="form-buttons">
-        <button id="saveNewAgent" class="btn-success">💾 Add Agent</button>
-        <button id="cancelNewAgent" class="btn-secondary">Cancel</button>
-      </div>
+      <small class="settings-note">📡 Agents are automatically added when they connect via mobile app</small>
     </div>
     
     <!-- Agents Table -->
     <div class="agents-table-container">
       <div id="agentsTableEmpty" class="table-empty-state">
-        <div class="empty-icon">👤</div>
-        <h4>No Agents Configured</h4>
-        <p>Add agents to start tracking their performance and call analytics.</p>
-        <button class="btn-success" onclick="document.getElementById('addAgentBtn').click()">➕ Add First Agent</button>
+        <div class="empty-icon">📱</div>
+        <h4>No Agents Connected</h4>
+        <p>Agents will appear automatically when they connect through the mobile app.</p>
+        <small>💡 Make sure agents are using the latest app version with proper server connection</small>
       </div>
       
       <table id="agentsTable" class="agents-table hidden">
@@ -101,7 +80,7 @@
     </div>
     
     <div class="settings-footer">
-      <small>💡 Tip: Agent codes are used by the mobile app to identify agents during calls.</small>
+      <small>💡 Tip: Agents are automatically added when they connect through the mobile app. Use delete to remove unwanted agents.</small>
     </div>
   </div>
 </div>
@@ -129,13 +108,11 @@
                                 <th>Agent Code</th>
                                 <th>Agent Name</th>
                                 <th>Talk Time</th>
-                                <th>Call Count</th>
-                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="talkTimeTableBody">
                             <tr>
-                                <td colspan="5" class="loading">Loading agents...</td>
+                                <td colspan="3" class="loading">Loading agents...</td>
                             </tr>
                         </tbody>
                     </table>

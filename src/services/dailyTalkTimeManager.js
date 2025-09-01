@@ -214,6 +214,26 @@ class DailyTalkTimeManager {
     await this.saveToFile();
   }
 
+  // Remove agent from today's data (used when agent is deleted)
+  async removeAgentFromToday(agentCode) {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const todayData = this.data.dailyData[today] || {};
+      
+      if (todayData[agentCode]) {
+        delete todayData[agentCode];
+        await this.saveToFile();
+        console.log(`🗑️ Removed ${agentCode} from today's talk time data`);
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('❌ Error removing agent from today data:', error.message);
+      throw error;
+    }
+  }
+
   // Cleanup old data (if needed in future)
   async cleanupOldData(daysToKeep = 1095) { // 3 years default
     try {

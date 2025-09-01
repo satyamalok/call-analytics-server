@@ -54,12 +54,30 @@ router.get('/health', async (req, res) => {
 });
 
 
-// Get live dashboard data (New: JSON-based talk time)
+// Get live dashboard data (New: JSON-based talk time - shows ALL agents)
 router.get('/dashboard/live', async (req, res) => {
   try {
-    // 🎯 NEW: Get today's talk time directly from JSON storage
-    const agentsTalkTime = dailyTalkTimeManager.getTodayTalkTime();
-    console.log(`📊 Dashboard: Found ${agentsTalkTime.length} agents with talk time data`);
+    // 🎯 NEW: Get ALL agents from JSON storage, then merge with today's talk time
+    const allAgents = agentManager.getAllAgents();
+    const todayTalkTime = dailyTalkTimeManager.getTodayTalkTime();
+    
+    // Create a map of today's talk time data for quick lookup
+    const todayTalkTimeMap = {};
+    todayTalkTime.forEach(agent => {
+      todayTalkTimeMap[agent.agentCode] = agent;
+    });
+    
+    // Create comprehensive agent list showing ALL agents in JSON
+    const agentsTalkTime = allAgents.map(agent => ({
+      agentCode: agent.agentCode,
+      agentName: agent.agentName,
+      totalTalkTime: todayTalkTimeMap[agent.agentCode]?.totalTalkTime || 0,
+      formattedTalkTime: todayTalkTimeMap[agent.agentCode]?.formattedTalkTime || '0s',
+      callCount: todayTalkTimeMap[agent.agentCode]?.callCount || 0,
+      lastUpdated: todayTalkTimeMap[agent.agentCode]?.lastUpdated || null
+    }));
+    
+    console.log(`📊 Dashboard: Showing ${allAgents.length} total agents (${todayTalkTime.length} have talk time today)`);
     
     // Get active calls and agent status from WebSocket manager's in-memory storage
     const webSocketManager = req.webSocketManager;
@@ -75,16 +93,17 @@ router.get('/dashboard/live', async (req, res) => {
       callType: callData.callType
     }));
 
-    // Calculate idle times for agents not on call
+    // Calculate idle times for ALL agents (not just those with talk time today)
     const agentsIdleTime = [];
     const now = new Date();
 
-    for (const agent of agentsTalkTime) {
+    for (const agent of allAgents) {
       // Skip if agent is currently on call
       if (activeCalls[agent.agentCode]) continue;
 
       const agentStatus = agentsStatus[agent.agentCode];
-      if (agentStatus && agentStatus.status === 'online' && agentStatus.lastCallEnd) {
+      // Show agent in idle time if they have a lastCallEnd timestamp (regardless of online status)
+      if (agentStatus && agentStatus.lastCallEnd) {
         const lastCallEnd = new Date(agentStatus.lastCallEnd);
         const minutesSinceLastCall = Math.floor((now - lastCallEnd) / (1000 * 60));
         
@@ -93,7 +112,8 @@ router.get('/dashboard/live', async (req, res) => {
             agentCode: agent.agentCode,
             agentName: agent.agentName,
             minutesSinceLastCall,
-            lastCallEnd: agentStatus.lastCallEnd
+            lastCallEnd: agentStatus.lastCallEnd,
+            isOnline: agentStatus.status === 'online'
           });
         }
       }
@@ -453,6 +473,18 @@ router.delete('/agents/:agentCode', async (req, res) => {
     const success = await agentManager.removeAgent(agentCode);
     
     if (success) {
+      // Also remove from today's talk time data
+      await dailyTalkTimeManager.removeAgentFromToday(agentCode);
+      
+      // Clear WebSocket data for this agent
+      if (req.webSocketManager) {
+        req.webSocketManager.agentStatuses.delete(agentCode);
+        req.webSocketManager.activeCalls.delete(agentCode);
+        req.webSocketManager.connectedAgents.delete(agentCode);
+        req.webSocketManager.agentIdleStartTimes.delete(agentCode);
+        console.log(`🧹 Cleared WebSocket data for ${agentCode}`);
+      }
+      
       res.json({
         success: true,
         message: `Agent ${agentCode} deleted successfully`
