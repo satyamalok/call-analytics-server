@@ -1170,6 +1170,16 @@ class IdleSessionsManager {
       });
     });
     
+    // Records per page selector
+    const recordsPerPageSelect = document.getElementById('recordsPerPageSelect');
+    if (recordsPerPageSelect) {
+      recordsPerPageSelect.addEventListener('change', (e) => {
+        this.recordsPerPage = parseInt(e.target.value);
+        this.currentPage = 1; // Reset to first page
+        this.loadIdleSessions();
+      });
+    }
+    
     // Pagination
     const prevBtn = document.getElementById('prevPage');
     const nextBtn = document.getElementById('nextPage');

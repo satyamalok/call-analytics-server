@@ -1217,6 +1217,28 @@ input:checked + .toggle-slider:before {
 .pagination-info {
   font-size: 0.9rem;
   color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.records-per-page {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.records-per-page label {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.records-per-page select {
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: white;
+  font-size: 14px;
 }
 
 .pagination-controls {

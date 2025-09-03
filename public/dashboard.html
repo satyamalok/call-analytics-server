@@ -251,6 +251,15 @@
             <div id="idleSessionsPagination" class="idle-sessions-pagination">
               <div class="pagination-info">
                 Showing <span id="recordsInfo">0</span> records
+                <div class="records-per-page">
+                  <label>Records per page:</label>
+                  <select id="recordsPerPageSelect">
+                    <option value="20" selected>20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                  </select>
+                </div>
               </div>
               <div class="pagination-controls">
                 <button id="prevPage" class="pagination-btn" disabled>

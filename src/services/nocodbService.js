@@ -329,7 +329,7 @@ class NocodbService {
         if (sort === 'idle_duration') {
           sortParam = `${sortOrder}Idle Duration`;
         } else if (sort === 'start_time') {
-          // For time sorting, sort by ID as proxy since start time format is not easily sortable
+          // For time sorting, we'll sort by ID for now but process results to sort by actual time
           sortParam = `${sortOrder}Id`;
         } else {
           sortParam = `${sortOrder}${nocoField}`;
@@ -344,18 +344,34 @@ class NocodbService {
       const totalRecords = result.pageInfo?.totalRows || result.list.length;
       const totalPages = Math.ceil(totalRecords / limitNum);
 
+      // Map and process the sessions
+      let processedSessions = result.list.map(session => ({
+        id: session.Id,
+        agent_code: session["Agent Code"],
+        agent_name: session["Agent Name"], 
+        start_time: session["Start Time"],
+        idle_duration: parseInt(session["Idle Duration"]) || 0,
+        session_date: session.Date,
+        formattedIdleDuration: this.formatDuration(parseInt(session["Idle Duration"]) || 0)
+      }));
+
+      // Apply client-side sorting for time and duration fields that NocoDB can't sort properly
+      if (sort === 'start_time') {
+        processedSessions.sort((a, b) => {
+          const timeA = this.parseTimeString(a.start_time);
+          const timeB = this.parseTimeString(b.start_time);
+          return order === 'asc' ? timeA - timeB : timeB - timeA;
+        });
+      } else if (sort === 'idle_duration') {
+        processedSessions.sort((a, b) => {
+          return order === 'asc' ? a.idle_duration - b.idle_duration : b.idle_duration - a.idle_duration;
+        });
+      }
+
       return {
         success: true,
         data: {
-          idleSessions: result.list.map(session => ({
-            id: session.Id,
-            agent_code: session["Agent Code"],
-            agent_name: session["Agent Name"],
-            start_time: session["Start Time"],
-            idle_duration: parseInt(session["Idle Duration"]) || 0,
-            session_date: session.Date,
-            formattedIdleDuration: this.formatDuration(parseInt(session["Idle Duration"]) || 0)
-          })),
+          idleSessions: processedSessions,
           totalRecords,
           totalPages,
           currentPage: pageNum,
@@ -391,6 +407,41 @@ class NocodbService {
       return `${minutes}m ${remainingSeconds}s`;
     } else {
       return `${remainingSeconds}s`;
+    }
+  }
+
+  // Helper method to parse time strings like "11:25 am" or "08:52:51" into comparable numbers
+  parseTimeString(timeStr) {
+    if (!timeStr) return 0;
+    
+    try {
+      // Handle formats like "11:25 am" or "11:25 AM"
+      if (timeStr.toLowerCase().includes('am') || timeStr.toLowerCase().includes('pm')) {
+        const [time, period] = timeStr.toLowerCase().split(' ');
+        const [hours, minutes] = time.split(':').map(Number);
+        
+        let hour24 = hours;
+        if (period === 'pm' && hours !== 12) {
+          hour24 = hours + 12;
+        } else if (period === 'am' && hours === 12) {
+          hour24 = 0;
+        }
+        
+        return hour24 * 60 + (minutes || 0); // Convert to minutes for comparison
+      } 
+      // Handle formats like "08:52:51" (24-hour format)
+      else if (timeStr.includes(':')) {
+        const parts = timeStr.split(':').map(Number);
+        const hours = parts[0] || 0;
+        const minutes = parts[1] || 0;
+        
+        return hours * 60 + minutes; // Convert to minutes for comparison
+      }
+      
+      return 0;
+    } catch (error) {
+      console.warn('Error parsing time string:', timeStr, error);
+      return 0;
     }
   }
 
