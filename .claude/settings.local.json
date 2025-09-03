@@ -12,7 +12,8 @@
       "Bash(del \"C:\\Users\\satya\\call-analytics-server\\src\\test-server.js\")",
       "Bash(rm:*)",
       "Read(c:\\Users\\satya\\Downloads\\Screenshots/**)",
-      "Read(c:\\Users\\satya\\Downloads\\Screenshots/**)"
+      "Read(c:\\Users\\satya\\Downloads\\Screenshots/**)",
+      "Bash(timeout 10s npm start)"
     ],
     "deny": [],
     "ask": []

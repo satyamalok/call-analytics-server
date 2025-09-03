@@ -518,13 +518,12 @@ function updateIdleTimeList(agents) {
  });
 
  const items = sortedAgents.map(agent => {
-   const isNoCallsYet = agent.noCallsYet || agent.minutesSinceLastCall === -1;
-   const idleTime = isNoCallsYet ? 'No calls yet' : formatIdleTime(agent.minutesSinceLastCall);
-   const urgencyClass = isNoCallsYet ? 'no-calls' : getUrgencyClass(agent.minutesSinceLastCall);
+   const idleTime = formatIdleTime(agent.minutesSinceLastCall);
+   const urgencyClass = getUrgencyClass(agent.minutesSinceLastCall);
    const onlineStatus = agent.isOnline ? 'online' : 'offline';
    const statusIcon = agent.isOnline ? '🟢' : '🔴';
-   const lastCallText = isNoCallsYet ? 'No calls made yet' : formatLastCallTime(agent.lastCallEnd);
-   const statusText = isNoCallsYet ? 'Waiting for first call' : getIdleStatusText(agent.minutesSinceLastCall);
+   const lastCallText = agent.lastCallEnd ? formatLastCallTime(agent.lastCallEnd) : 'No calls today';
+   const statusText = getIdleStatusText(agent.minutesSinceLastCall);
    
    return `
      <div class="idle-item compact ${urgencyClass} fade-in" data-agent-code="${agent.agentCode}">

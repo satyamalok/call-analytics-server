@@ -15,6 +15,7 @@ class WebSocketManager {
     
     this.init();
     this.startReminderSystem();
+    this.startAgentStatusPingSystem();
   }
 
   init() {
@@ -51,6 +52,11 @@ class WebSocketManager {
   console.log(`✅ Reminder acknowledgment received:`, JSON.stringify(data, null, 2));
   await this.handleReminderAcknowledgment(socket, data);
 });
+
+      // Handle agent status response from ping
+      socket.on('agent_status_response', async (data) => {
+        await this.handleAgentStatusResponse(socket, data);
+      });
 
 // Manual notification trigger from dashboard
 socket.on('send_manual_reminder', async (data) => {
@@ -358,15 +364,21 @@ getIdleTrackingStatus() {
           });
         }
       } else {
-        // Agent has no call history or status - show them as "no calls yet"
-        console.log(`📊 ${agent.agentCode}: No call history - showing as waiting for first call`);
+        // Agent has no call history - calculate idle time from when they first went online
+        let minutesSinceLastCall = 0;
+        
+        if (agentStatus && agentStatus.lastUpdate) {
+          const lastUpdate = new Date(agentStatus.lastUpdate);
+          minutesSinceLastCall = Math.floor((now - lastUpdate) / (1000 * 60));
+        }
+        
+        console.log(`📊 ${agent.agentCode}: No call history - idle for ${minutesSinceLastCall} minutes since going online`);
         agentsIdleTime.push({
           agentCode: agent.agentCode,
           agentName: agent.agentName,
-          minutesSinceLastCall: -1, // Special value for "no calls yet"
+          minutesSinceLastCall,
           lastCallEnd: null,
-          isOnline: agentStatus ? agentStatus.status === 'online' : false,
-          noCallsYet: true
+          isOnline: agentStatus ? agentStatus.status === 'online' : false
         });
       }
     }
@@ -458,14 +470,21 @@ async checkAndSendReminders() {
       }
 
       // Check if agent has been idle long enough
+      let minutesIdle = 0;
+      
       if (agentStatus.lastCallEnd) {
+        // Agent has call history - calculate from last call end
         const lastCallEnd = new Date(agentStatus.lastCallEnd);
-        const minutesIdle = Math.floor((now - lastCallEnd) / (1000 * 60));
-        
-        // Check if we should send a reminder (at multiples of interval)
-        if (this.shouldSendReminder(agentCode, minutesIdle, reminderIntervalMinutes)) {
-          await this.sendReminderToAgent(agentCode, agentName, minutesIdle, reminderIntervalMinutes);
-        }
+        minutesIdle = Math.floor((now - lastCallEnd) / (1000 * 60));
+      } else if (agentStatus.lastUpdate) {
+        // Agent has no call history - calculate from when they went online
+        const lastUpdate = new Date(agentStatus.lastUpdate);
+        minutesIdle = Math.floor((now - lastUpdate) / (1000 * 60));
+      }
+      
+      // Check if we should send a reminder (at multiples of interval)
+      if (minutesIdle > 0 && this.shouldSendReminder(agentCode, minutesIdle, reminderIntervalMinutes)) {
+        await this.sendReminderToAgent(agentCode, agentName, minutesIdle, reminderIntervalMinutes);
       }
     }
 
@@ -672,6 +691,142 @@ async handleReminderAcknowledgment(socket, data) {
   console.log('✅ Reminder system started - checking every minute');
 }
 
+  // Start agent status ping system
+  startAgentStatusPingSystem() {
+    // Ping agents on call every minute to verify their status
+    this.statusPingInterval = setInterval(async () => {
+      await this.pingAgentsOnCall();
+    }, 60000); // 60 seconds
+
+    console.log('✅ Agent status ping system started - pinging every minute');
+  }
+
+  // Ping all agents currently on call to verify their status
+  async pingAgentsOnCall() {
+    try {
+      const activeCalls = Object.fromEntries(this.activeCalls);
+      
+      if (Object.keys(activeCalls).length === 0) {
+        return; // No agents on call
+      }
+
+      console.log(`🔍 Pinging ${Object.keys(activeCalls).length} agents on call for status verification`);
+
+      for (const [agentCode, callData] of Object.entries(activeCalls)) {
+        const socketId = this.connectedAgents.get(agentCode);
+        
+        if (socketId) {
+          const requestId = `status_${Date.now()}_${agentCode}`;
+          const pingData = {
+            agentCode: agentCode,
+            requestId: requestId,
+            timestamp: new Date().toISOString()
+          };
+
+          // Send status request to agent
+          this.io.to(socketId).emit('agent_status_request', pingData);
+          
+          console.log(`📍 Status ping sent to ${agentCode} (request: ${requestId})`);
+
+          // Set timeout to handle non-responsive agents (10 seconds)
+          setTimeout(() => {
+            this.handleStatusPingTimeout(agentCode, requestId);
+          }, 10000);
+        } else {
+          // Agent not connected but still in active calls - move them to idle
+          console.log(`⚠️ Agent ${agentCode} in active calls but not connected - moving to idle`);
+          await this.moveAgentToIdleStatus(agentCode, callData.agentName);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error pinging agents on call:', error.message);
+    }
+  }
+
+  // Handle agent status response from ping
+  async handleAgentStatusResponse(socket, data) {
+    try {
+      const { agentCode, requestId, status, timestamp, lastCallTime } = data;
+      
+      console.log(`📍 Status response from ${agentCode}: ${status} (request: ${requestId})`);
+
+      if (status === 'free') {
+        // Agent is no longer on call - move to idle
+        await this.moveAgentToIdleStatus(agentCode, socket.agentName, lastCallTime);
+      } else if (status === 'on_call') {
+        // Agent confirmed still on call - update timestamp
+        const agentStatus = this.agentStatuses.get(agentCode);
+        if (agentStatus) {
+          agentStatus.lastUpdate = timestamp;
+          this.agentStatuses.set(agentCode, agentStatus);
+        }
+        console.log(`✅ ${agentCode} confirmed still on call`);
+      }
+    } catch (error) {
+      console.error('❌ Error handling agent status response:', error.message);
+    }
+  }
+
+  // Handle timeout when agent doesn't respond to status ping
+  async handleStatusPingTimeout(agentCode, requestId) {
+    try {
+      // Check if agent is still in active calls (response might have been received)
+      if (this.activeCalls.has(agentCode)) {
+        console.log(`⏰ Agent ${agentCode} didn't respond to status ping ${requestId} - assuming offline/disconnected`);
+        
+        // Get agent info before removing
+        const callData = this.activeCalls.get(agentCode);
+        
+        // Move agent to offline status
+        this.agentStatuses.set(agentCode, {
+          status: 'offline',
+          lastUpdate: new Date().toISOString()
+        });
+        
+        // Clear active call
+        this.activeCalls.delete(agentCode);
+        
+        // Remove from connected agents
+        this.connectedAgents.delete(agentCode);
+        
+        console.log(`📴 ${agentCode} moved to offline due to no response`);
+        
+        // Broadcast updated dashboard data
+        await this.broadcastDashboardUpdate();
+      }
+    } catch (error) {
+      console.error('❌ Error handling status ping timeout:', error.message);
+    }
+  }
+
+  // Move agent from active call to idle status
+  async moveAgentToIdleStatus(agentCode, agentName, lastCallTime) {
+    try {
+      const endTime = lastCallTime || new Date().toISOString();
+      
+      // Update agent status to online
+      this.agentStatuses.set(agentCode, {
+        status: 'online',
+        agentName: agentName || 'Unknown',
+        lastCallEnd: endTime,
+        lastUpdate: endTime
+      });
+      
+      // Clear active call
+      this.activeCalls.delete(agentCode);
+
+      // Start tracking idle time
+      this.agentIdleStartTimes.set(agentCode, new Date(endTime));
+      
+      console.log(`🔄 ${agentCode} moved from active call to idle status`);
+      
+      // Broadcast updated dashboard data
+      await this.broadcastDashboardUpdate();
+    } catch (error) {
+      console.error('❌ Error moving agent to idle status:', error.message);
+    }
+  }
+
 // 🎯 REMOVED: Call timers are no longer needed in the dashboard
 // Real-time updates are handled by WebSocket events only
 
@@ -686,6 +841,11 @@ cleanup() {
   if (this.reminderInterval) {
     clearInterval(this.reminderInterval);
     console.log('✅ Reminder system stopped');
+  }
+  
+  if (this.statusPingInterval) {
+    clearInterval(this.statusPingInterval);
+    console.log('✅ Agent status ping system stopped');
   }
   
   console.log('✅ WebSocket cleanup completed');

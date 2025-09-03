@@ -118,14 +118,20 @@ router.get('/dashboard/live', async (req, res) => {
           });
         }
       } else {
-        // Agent has no call history or status - show them as "no calls yet"
+        // Agent has no call history - calculate idle time from when they first went online
+        let minutesSinceLastCall = 0;
+        
+        if (agentStatus && agentStatus.lastUpdate) {
+          const lastUpdate = new Date(agentStatus.lastUpdate);
+          minutesSinceLastCall = Math.floor((now - lastUpdate) / (1000 * 60));
+        }
+        
         agentsIdleTime.push({
           agentCode: agent.agentCode,
           agentName: agent.agentName,
-          minutesSinceLastCall: -1, // Special value for "no calls yet"
+          minutesSinceLastCall,
           lastCallEnd: null,
-          isOnline: agentStatus ? agentStatus.status === 'online' : false,
-          noCallsYet: true
+          isOnline: agentStatus ? agentStatus.status === 'online' : false
         });
       }
     }
