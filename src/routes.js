@@ -113,8 +113,7 @@ router.get('/dashboard/live', async (req, res) => {
             agentCode: agent.agentCode,
             agentName: agent.agentName,
             minutesSinceLastCall,
-            lastCallEnd: agentStatus.lastCallEnd,
-            isOnline: agentStatus.status === 'online'
+            lastCallEnd: agentStatus.lastCallEnd
           });
         }
       } else {
@@ -130,8 +129,7 @@ router.get('/dashboard/live', async (req, res) => {
           agentCode: agent.agentCode,
           agentName: agent.agentName,
           minutesSinceLastCall,
-          lastCallEnd: null,
-          isOnline: agentStatus ? agentStatus.status === 'online' : false
+          lastCallEnd: null
         });
       }
     }

@@ -216,6 +216,58 @@ function handleManualReminderResponse(data) {
   }
 }
 
+// NEW: Send manual removal request to move agent from "Currently on Call" to "Time Since Last Call"
+async function sendManualRemoval(agentCode, agentName) {
+  if (!isConnected) {
+    showToast('Not connected to server', 'error');
+    return;
+  }
+
+  try {
+    debugLog(`Sending manual removal request for ${agentCode}`);
+    
+    // Disable button temporarily to prevent spam
+    const button = document.querySelector(`[data-agent-code="${agentCode}"] .manual-remove-btn`);
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = 'Removing...';
+    }
+
+    // Send manual removal request via WebSocket
+    socket.emit('manual_remove_from_call', {
+      agentCode: agentCode,
+      agentName: agentName,
+      timestamp: new Date().toISOString()
+    });
+
+    showToast(`Moving ${agentCode} to idle status`, 'info');
+
+  } catch (error) {
+    debugLog(`Error sending manual removal for ${agentCode}:`, error.message);
+    showToast(`Failed to remove agent: ${error.message}`, 'error');
+  }
+}
+
+// NEW: Handle manual removal response from server
+function handleManualRemoveResponse(data) {
+  const { success, agentCode, error } = data;
+  
+  // Re-enable button
+  const button = document.querySelector(`[data-agent-code="${agentCode}"] .manual-remove-btn`);
+  if (button) {
+    button.disabled = false;
+    button.innerHTML = '🔄 Remove';
+  }
+
+  if (success) {
+    debugLog(`Manual removal successful for ${agentCode}`);
+    showToast(`${agentCode} moved to idle status`, 'success');
+  } else {
+    debugLog(`Manual removal failed for ${agentCode}: ${error}`);
+    showToast(`Failed to remove ${agentCode}: ${error}`, 'error');
+  }
+}
+
 // WebSocket Functions
 function initWebSocket() {
   try {
@@ -262,10 +314,13 @@ function setupWebSocketEvents() {
   });
 
   socket.on('dashboard_update', (data) => {
-    socket.on('manual_reminder_response', handleManualReminderResponse);
     debugLog('Dashboard update received');
     handleDashboardUpdate(data);
   });
+
+  socket.on('manual_reminder_response', handleManualReminderResponse);
+  
+  socket.on('manual_remove_response', handleManualRemoveResponse);
 
   socket.on('error', (error) => {
     debugLog('Server error:', error);
@@ -486,6 +541,9 @@ function updateOnCallList(agents) {
          <span class="agent-name">${sanitizeHTML(agent.agentCode)} - ${sanitizeHTML(agent.agentName)}</span>
          <span class="call-type">${callTypeIcon} ${agent.callType}</span>
          <span class="status-badge on-call">On Call</span>
+         <button class="manual-remove-btn" data-agent-code="${agent.agentCode}" data-agent-name="${agent.agentName}" title="Remove from Currently on Call">
+           🔄 Remove
+         </button>
        </div>
        <div class="compact-line-2">
          <span class="call-details">Started: ${startTime}</span>
@@ -520,25 +578,23 @@ function updateIdleTimeList(agents) {
  const items = sortedAgents.map(agent => {
    const idleTime = formatIdleTime(agent.minutesSinceLastCall);
    const urgencyClass = getUrgencyClass(agent.minutesSinceLastCall);
-   const onlineStatus = agent.isOnline ? 'online' : 'offline';
-   const statusIcon = agent.isOnline ? '🟢' : '🔴';
    const lastCallText = agent.lastCallEnd ? formatLastCallTime(agent.lastCallEnd) : 'No calls today';
    const statusText = getIdleStatusText(agent.minutesSinceLastCall);
    
    return `
      <div class="idle-item compact ${urgencyClass} fade-in" data-agent-code="${agent.agentCode}">
        <div class="compact-line-1">
-         <span class="agent-name">${sanitizeHTML(agent.agentCode)} - ${sanitizeHTML(agent.agentName)} ${statusIcon}</span>
+         <span class="agent-name">${sanitizeHTML(agent.agentCode)} - ${sanitizeHTML(agent.agentName)}</span>
          <span class="time-badge idle-badge ${urgencyClass}" data-minutes="${agent.minutesSinceLastCall || 0}">
            ${idleTime}
          </span>
-         <button class="manual-reminder-btn" data-agent-code="${agent.agentCode}" data-agent-name="${agent.agentName}" title="Send notification to agent" ${!agent.isOnline ? 'disabled' : ''}>
-           📱 ${agent.isOnline ? 'Notify' : 'Offline'}
+         <button class="manual-reminder-btn" data-agent-code="${agent.agentCode}" data-agent-name="${agent.agentName}" title="Send notification to agent">
+           📱 Notify
          </button>
        </div>
        <div class="compact-line-2">
          <span class="last-call-info">${lastCallText}</span>
-         <span class="idle-status">${statusText} (${onlineStatus})</span>
+         <span class="idle-status">${statusText}</span>
        </div>
      </div>
    `;
@@ -806,6 +862,16 @@ function setupEventListeners() {
       
       if (agentCode && agentName) {
         sendManualReminder(agentCode, agentName);
+      }
+    }
+    
+    // Manual removal button click handler
+    if (e.target.classList.contains('manual-remove-btn')) {
+      const agentCode = e.target.getAttribute('data-agent-code');
+      const agentName = e.target.getAttribute('data-agent-name');
+      
+      if (agentCode && agentName) {
+        sendManualRemoval(agentCode, agentName);
       }
     }
   });

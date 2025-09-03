@@ -65,5 +65,23 @@ bower_components
 .yarn-integrity
 
 # JSON storage files for this project
-data/
-storage/
+data/*
+!data/.gitkeep
+storage/*
+!storage/.gitkeep
+
+# Test files and development utilities
+test-*.js
+*test*.js
+config/test-config.js
+docker-compose.test.yml
+
+# Development documentation and examples
+.claude/
+PRODUCTION-DEPLOYMENT.md
+
+# Temporary and development files
+temp/
+tmp/
+*.tmp
+*.bak
