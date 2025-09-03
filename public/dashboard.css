@@ -1323,6 +1323,42 @@ input:checked + .toggle-slider:before {
   box-shadow: none;
 }
 
+/* Manual remove button (X button) for Currently on Call section */
+.manual-remove-btn {
+  background: #E74C3C;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  margin-left: 8px;
+}
+
+.manual-remove-btn:hover:not(:disabled) {
+  background: #C0392B;
+  transform: scale(1.1);
+}
+
+.manual-remove-btn:active {
+  transform: scale(0.95);
+}
+
+.manual-remove-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #95A5A6;
+  transform: none;
+}
+
 /* Agent Performance Dashboard Styles */
 .agent-performance-section {
   margin-top: 2rem;

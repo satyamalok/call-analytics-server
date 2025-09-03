@@ -256,7 +256,7 @@ function handleManualRemoveResponse(data) {
   const button = document.querySelector(`[data-agent-code="${agentCode}"] .manual-remove-btn`);
   if (button) {
     button.disabled = false;
-    button.innerHTML = '🔄 Remove';
+    button.innerHTML = '✕';
   }
 
   if (success) {
@@ -542,7 +542,7 @@ function updateOnCallList(agents) {
          <span class="call-type">${callTypeIcon} ${agent.callType}</span>
          <span class="status-badge on-call">On Call</span>
          <button class="manual-remove-btn" data-agent-code="${agent.agentCode}" data-agent-name="${agent.agentName}" title="Remove from Currently on Call">
-           🔄 Remove
+           ✕
          </button>
        </div>
        <div class="compact-line-2">
@@ -578,8 +578,6 @@ function updateIdleTimeList(agents) {
  const items = sortedAgents.map(agent => {
    const idleTime = formatIdleTime(agent.minutesSinceLastCall);
    const urgencyClass = getUrgencyClass(agent.minutesSinceLastCall);
-   const lastCallText = agent.lastCallEnd ? formatLastCallTime(agent.lastCallEnd) : 'No calls today';
-   const statusText = getIdleStatusText(agent.minutesSinceLastCall);
    
    return `
      <div class="idle-item compact ${urgencyClass} fade-in" data-agent-code="${agent.agentCode}">
@@ -591,10 +589,6 @@ function updateIdleTimeList(agents) {
          <button class="manual-reminder-btn" data-agent-code="${agent.agentCode}" data-agent-name="${agent.agentName}" title="Send notification to agent">
            📱 Notify
          </button>
-       </div>
-       <div class="compact-line-2">
-         <span class="last-call-info">${lastCallText}</span>
-         <span class="idle-status">${statusText}</span>
        </div>
      </div>
    `;

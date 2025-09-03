@@ -102,36 +102,31 @@ router.get('/dashboard/live', async (req, res) => {
       if (activeCalls[agent.agentCode]) continue;
 
       const agentStatus = agentsStatus[agent.agentCode];
+      let minutesSinceLastCall = 0;
       
       if (agentStatus && agentStatus.lastCallEnd) {
-        // Agent has made calls before - show actual idle time
+        // Agent has made calls before - calculate from last call end
         const lastCallEnd = new Date(agentStatus.lastCallEnd);
-        const minutesSinceLastCall = Math.floor((now - lastCallEnd) / (1000 * 60));
-        
-        if (minutesSinceLastCall >= 0) {
-          agentsIdleTime.push({
-            agentCode: agent.agentCode,
-            agentName: agent.agentName,
-            minutesSinceLastCall,
-            lastCallEnd: agentStatus.lastCallEnd
-          });
-        }
+        minutesSinceLastCall = Math.floor((now - lastCallEnd) / (1000 * 60));
+      } else if (agentStatus && agentStatus.lastUpdate) {
+        // Agent has no call history but has a status - calculate from when they went online
+        const lastUpdate = new Date(agentStatus.lastUpdate);
+        minutesSinceLastCall = Math.floor((now - lastUpdate) / (1000 * 60));
       } else {
-        // Agent has no call history - calculate idle time from when they first went online
-        let minutesSinceLastCall = 0;
-        
-        if (agentStatus && agentStatus.lastUpdate) {
-          const lastUpdate = new Date(agentStatus.lastUpdate);
-          minutesSinceLastCall = Math.floor((now - lastUpdate) / (1000 * 60));
-        }
-        
-        agentsIdleTime.push({
-          agentCode: agent.agentCode,
-          agentName: agent.agentName,
-          minutesSinceLastCall,
-          lastCallEnd: null
-        });
+        // Agent has no status at all - show a default idle time (could be from creation time)
+        const createdAt = agent.createdAt ? new Date(agent.createdAt) : new Date(Date.now() - 17 * 60 * 1000);
+        minutesSinceLastCall = Math.floor((now - createdAt) / (1000 * 60));
       }
+      
+      // Ensure minimum 0 minutes
+      minutesSinceLastCall = Math.max(0, minutesSinceLastCall);
+      
+      agentsIdleTime.push({
+        agentCode: agent.agentCode,
+        agentName: agent.agentName,
+        minutesSinceLastCall,
+        lastCallEnd: agentStatus ? agentStatus.lastCallEnd : null
+      });
     }
 
     res.json({

@@ -368,39 +368,34 @@ getIdleTrackingStatus() {
       }
 
       const agentStatus = agentsStatus[agent.agentCode];
+      let minutesSinceLastCall = 0;
       
       if (agentStatus && agentStatus.lastCallEnd) {
-        // Agent has made calls before - show actual idle time
+        // Agent has made calls before - calculate from last call end
         const lastCallEnd = new Date(agentStatus.lastCallEnd);
-        const minutesSinceLastCall = Math.floor((now - lastCallEnd) / (1000 * 60));
-        
-        console.log(`📊 ${agent.agentCode}: Last call ${minutesSinceLastCall} minutes ago (status: ${agentStatus.status})`);
-        
-        if (minutesSinceLastCall >= 0) {
-          agentsIdleTime.push({
-            agentCode: agent.agentCode,
-            agentName: agent.agentName,
-            minutesSinceLastCall,
-            lastCallEnd: agentStatus.lastCallEnd
-          });
-        }
-      } else {
-        // Agent has no call history - calculate idle time from when they first went online
-        let minutesSinceLastCall = 0;
-        
-        if (agentStatus && agentStatus.lastUpdate) {
-          const lastUpdate = new Date(agentStatus.lastUpdate);
-          minutesSinceLastCall = Math.floor((now - lastUpdate) / (1000 * 60));
-        }
-        
+        minutesSinceLastCall = Math.floor((now - lastCallEnd) / (1000 * 60));
+        console.log(`📊 ${agent.agentCode}: Last call ${minutesSinceLastCall} minutes ago`);
+      } else if (agentStatus && agentStatus.lastUpdate) {
+        // Agent has no call history but has a status - calculate from when they went online
+        const lastUpdate = new Date(agentStatus.lastUpdate);
+        minutesSinceLastCall = Math.floor((now - lastUpdate) / (1000 * 60));
         console.log(`📊 ${agent.agentCode}: No call history - idle for ${minutesSinceLastCall} minutes since going online`);
-        agentsIdleTime.push({
-          agentCode: agent.agentCode,
-          agentName: agent.agentName,
-          minutesSinceLastCall,
-          lastCallEnd: null
-        });
+      } else {
+        // Agent has no status at all - show a default idle time (could be from creation time)
+        const createdAt = agent.createdAt ? new Date(agent.createdAt) : new Date(Date.now() - 17 * 60 * 1000);
+        minutesSinceLastCall = Math.floor((now - createdAt) / (1000 * 60));
+        console.log(`📊 ${agent.agentCode}: No status data - using creation time, idle for ${minutesSinceLastCall} minutes`);
       }
+      
+      // Ensure minimum 0 minutes
+      minutesSinceLastCall = Math.max(0, minutesSinceLastCall);
+      
+      agentsIdleTime.push({
+        agentCode: agent.agentCode,
+        agentName: agent.agentName,
+        minutesSinceLastCall,
+        lastCallEnd: agentStatus ? agentStatus.lastCallEnd : null
+      });
     }
 
     console.log(`📊 Dashboard: Sending ${agentsIdleTime.length} idle agents`);
@@ -464,13 +459,18 @@ async checkAndSendReminders() {
     // Get all enabled agent reminder settings from JSON
     const enabledReminders = require('./services/agentManager').getEnabledReminderAgents();
     
+    console.log(`🔔 Checking reminders for ${enabledReminders.length} agents with enabled notifications`);
+    
     if (enabledReminders.length === 0) {
+      console.log(`ℹ️ No agents have reminders enabled - skipping check`);
       return; // No agents have reminders enabled
     }
 
     // Get current idle agents from in-memory storage
     const agentsStatus = Object.fromEntries(this.agentStatuses);
     const activeCalls = Object.fromEntries(this.activeCalls);
+    
+    console.log(`📊 Current status: ${Object.keys(agentsStatus).length} agents with status, ${Object.keys(activeCalls).length} on call`);
     
     const now = new Date();
 
@@ -502,8 +502,12 @@ async checkAndSendReminders() {
         minutesIdle = Math.floor((now - lastUpdate) / (1000 * 60));
       }
       
-      // Check if we should send a reminder (at multiples of interval)
-      if (minutesIdle > 0 && this.shouldSendReminder(agentCode, minutesIdle, reminderIntervalMinutes)) {
+      // Ensure minimum 0 minutes
+      minutesIdle = Math.max(0, minutesIdle);
+      
+      // Check if we should send a reminder (at multiples of interval and at least the interval time)
+      if (minutesIdle >= reminderIntervalMinutes && this.shouldSendReminder(agentCode, minutesIdle, reminderIntervalMinutes)) {
+        console.log(`🔔 Attempting to send reminder to ${agentCode}: ${minutesIdle} minutes idle (interval: ${reminderIntervalMinutes})`);
         await this.sendReminderToAgent(agentCode, agentName, minutesIdle, reminderIntervalMinutes);
       }
     }
@@ -514,29 +518,46 @@ async checkAndSendReminders() {
 }
 
 shouldSendReminder(agentCode, minutesIdle, intervalMinutes) {
-  // Only send reminder at exact multiples of the interval
+  // Must be at least the interval time and a multiple of the interval
   if (minutesIdle < intervalMinutes || minutesIdle % intervalMinutes !== 0) {
     return false;
   }
 
-  // Check if we already sent a reminder for this exact minute
-  const lastReminderKey = `${agentCode}-${minutesIdle}`;
-  if (this.recentReminders && this.recentReminders.has(lastReminderKey)) {
-    return false;
+  // Check when we last sent a reminder to this agent
+  const lastReminderTime = this.lastReminders.get(agentCode);
+  const now = Date.now();
+  
+  if (lastReminderTime) {
+    const minutesSinceLastReminder = Math.floor((now - new Date(lastReminderTime)) / (1000 * 60));
+    
+    // Don't send another reminder within the same interval period
+    if (minutesSinceLastReminder < intervalMinutes) {
+      console.log(`⏳ Skipping reminder for ${agentCode}: Last sent ${minutesSinceLastReminder} minutes ago (interval: ${intervalMinutes})`);
+      return false;
+    }
   }
 
-  // Mark this reminder as sent (prevent duplicates)
+  // Additional check: use a simple deduplication key for the current minute
+  const currentMinuteKey = `${agentCode}-${Math.floor(now / (1000 * 60))}`;
+  
   if (!this.recentReminders) {
     this.recentReminders = new Set();
   }
-  this.recentReminders.add(lastReminderKey);
-
-  // Clean up old entries (keep only last 100)
-  if (this.recentReminders.size > 100) {
-    const oldestEntries = Array.from(this.recentReminders).slice(0, 20);
+  
+  if (this.recentReminders.has(currentMinuteKey)) {
+    return false;
+  }
+  
+  // Mark this minute as processed for this agent
+  this.recentReminders.add(currentMinuteKey);
+  
+  // Clean up old entries (keep only last 60 minutes worth)
+  if (this.recentReminders.size > 60) {
+    const oldestEntries = Array.from(this.recentReminders).slice(0, 10);
     oldestEntries.forEach(entry => this.recentReminders.delete(entry));
   }
 
+  console.log(`✅ Reminder approved for ${agentCode}: ${minutesIdle} minutes idle, interval: ${intervalMinutes}`);
   return true;
 }
 
