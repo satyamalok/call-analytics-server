@@ -179,6 +179,7 @@ socket.on('manual_remove_from_call', async (data) => {
     const { agentCode, agentName, phoneNumber, callType } = data;
     
     if (!agentCode) {
+      console.log('❌ ERROR: No agent code provided in call_started event');
       socket.emit('error', { message: 'Agent code required' });
       return;
     }
@@ -212,6 +213,8 @@ socket.on('manual_remove_from_call', async (data) => {
       startTime: startTime
     });
 
+    console.log('📊 Active calls count:', this.activeCalls.size);
+
     // Broadcast updated dashboard data
     await this.broadcastDashboardUpdate();
 
@@ -226,6 +229,7 @@ socket.on('manual_remove_from_call', async (data) => {
     const { agentCode, callData, todayTotalTalkTime } = data;
     
     if (!agentCode || !callData) {
+      console.log('❌ ERROR: Missing agent code or call data in call_ended event');
       socket.emit('error', { message: 'Agent code and call data required' });
       return;
     }
@@ -256,6 +260,8 @@ socket.on('manual_remove_from_call', async (data) => {
     
     // Clear active call
     this.activeCalls.delete(agentCode);
+
+    console.log('📊 Active calls after removal:', this.activeCalls.size);
 
     // 🎯 NEW: Start tracking idle time
     this.agentIdleStartTimes.set(agentCode, new Date());
@@ -356,6 +362,7 @@ getIdleTrackingStatus() {
       callType: callData.callType
     }));
 
+
     // Calculate idle times for ALL agents (not just those with talk time today)
     const agentsIdleTime = [];
     const now = new Date();
@@ -400,12 +407,16 @@ getIdleTrackingStatus() {
 
     console.log(`📊 Dashboard: Sending ${agentsIdleTime.length} idle agents`);
 
-    return {
+    const dashboardData = {
       agentsTalkTime: agentsTalkTime.sort((a, b) => (b.totalTalkTime || 0) - (a.totalTalkTime || 0)),
       agentsOnCall,
       agentsIdleTime: agentsIdleTime.sort((a, b) => b.minutesSinceLastCall - a.minutesSinceLastCall),
       lastUpdated: new Date().toISOString()
     };
+
+    console.log(`📊 Dashboard data: ${dashboardData.agentsTalkTime.length} total, ${dashboardData.agentsOnCall.length} on call, ${dashboardData.agentsIdleTime.length} idle`);
+    
+    return dashboardData;
 
   } catch (error) {
     console.error('❌ Error getting dashboard data:', error.message);
