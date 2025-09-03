@@ -673,9 +673,9 @@ function updateConnectionStatus(connected, status) {
 function updateHeaderStats(data) {
  const agentCount = document.getElementById('agentCount');
  if (agentCount) {
-   const totalAgents = (data.agentsTalkTime?.length || 0) + 
-                      (data.agentsOnCall?.length || 0) + 
-                      (data.agentsIdleTime?.length || 0);
+   // Use agentsTalkTime as it represents ALL agents in the system
+   // agentsOnCall and agentsIdleTime are subsets of this main list
+   const totalAgents = data.agentsTalkTime?.length || 0;
    agentCount.textContent = formatAgentCount(totalAgents);
  }
 }
@@ -1146,8 +1146,7 @@ class IdleSessionsManager {
   init() {
     this.setupEventListeners();
     this.loadAgentOptions();
-    this.setDefaultDate();
-    this.loadIdleSessions();
+    // Don't set default date or auto-load data - let user choose filters first
   }
   
   setupEventListeners() {
@@ -1232,6 +1231,12 @@ class IdleSessionsManager {
     if (agentSelect) this.currentFilters.agentCode = agentSelect.value;
     if (dateSelect) this.currentFilters.date = dateSelect.value;
     
+    // Require at least a date to be selected
+    if (!this.currentFilters.date) {
+      alert('Please select a date to view idle sessions.');
+      return;
+    }
+    
     this.currentPage = 1; // Reset to first page
     this.loadIdleSessions();
   }
@@ -1241,14 +1246,16 @@ class IdleSessionsManager {
     const dateSelect = document.getElementById('dateSelect');
     
     if (agentSelect) agentSelect.value = '';
-    this.setDefaultDate();
+    if (dateSelect) dateSelect.value = '';
     
     this.currentFilters = { 
       agentCode: '', 
-      date: dateSelect ? dateSelect.value : ''
+      date: ''
     };
     this.currentPage = 1;
-    this.loadIdleSessions();
+    
+    // Show empty state instead of loading data
+    this.showEmpty();
   }
   
   handleSort(field) {
