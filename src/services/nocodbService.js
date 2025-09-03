@@ -319,12 +319,21 @@ class NocodbService {
         // Map sort fields to NocoDB field names
         const fieldMap = {
           'agent_code': 'Agent Code',
-          'start_time': 'Start Time',
+          'start_time': 'Start Time', 
           'idle_duration': 'Idle Duration'
         };
         
         const nocoField = fieldMap[sort] || 'Start Time';
-        sortParam = `${sortOrder}Id`; // Default to ID sort since NocoDB field name sorting can be tricky
+        
+        // For duration sorting, we need to sort by the numeric value
+        if (sort === 'idle_duration') {
+          sortParam = `${sortOrder}Idle Duration`;
+        } else if (sort === 'start_time') {
+          // For time sorting, sort by ID as proxy since start time format is not easily sortable
+          sortParam = `${sortOrder}Id`;
+        } else {
+          sortParam = `${sortOrder}${nocoField}`;
+        }
       }
 
       console.log(`🔍 Getting idle sessions: agent=${agent_code}, date=${start_date}, page=${pageNum}`);

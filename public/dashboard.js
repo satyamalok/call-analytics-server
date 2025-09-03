@@ -541,13 +541,11 @@ function updateOnCallList(agents) {
          <span class="agent-name">${sanitizeHTML(agent.agentCode)} - ${sanitizeHTML(agent.agentName)}</span>
          <span class="call-type">${callTypeIcon} ${agent.callType}</span>
          <span class="status-badge on-call">On Call</span>
+         <span class="call-details">Started: ${startTime}</span>
+         <span class="phone-number">${phoneNumber}</span>
          <button class="manual-remove-btn" data-agent-code="${agent.agentCode}" data-agent-name="${agent.agentName}" title="Remove from Currently on Call">
            ✕
          </button>
-       </div>
-       <div class="compact-line-2">
-         <span class="call-details">Started: ${startTime}</span>
-         <span class="phone-number">${phoneNumber}</span>
        </div>
      </div>
    `;
@@ -1360,26 +1358,16 @@ class IdleSessionsManager {
   createSessionRow(session) {
     const row = document.createElement('tr');
     
-    const startTime = new Date(session.start_time).toLocaleTimeString('en-US', { 
-      hour: 'numeric', 
-      minute: '2-digit',
-      hour12: true 
-    });
+    // Handle the start time - it comes from NocoDB as "11:25 am" format, not as timestamp
+    const startTime = session['Start Time'] || session.start_time || 'Unknown';
     
-    const endTime = new Date(session.end_time).toLocaleTimeString('en-US', { 
-      hour: 'numeric', 
-      minute: '2-digit',
-      hour12: true 
-    });
-    
-    const duration = this.formatDuration(session.idle_duration);
-    const durationClass = this.getDurationClass(session.idle_duration);
+    const duration = this.formatDuration(session['Idle Duration'] || session.idle_duration);
+    const durationClass = this.getDurationClass(session['Idle Duration'] || session.idle_duration);
     
     row.innerHTML = `
-      <td style="font-weight: 600;">${session.agent_code}</td>
-      <td>${session.agent_name || 'Unknown'}</td>
+      <td style="font-weight: 600;">${session['Agent Code'] || session.agent_code}</td>
+      <td>${session['Agent Name'] || session.agent_name || 'Unknown'}</td>
       <td>${startTime}</td>
-      <td>${endTime}</td>
       <td>
         <span class="${durationClass}">${duration}</span>
       </td>

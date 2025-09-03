@@ -1340,7 +1340,8 @@ input:checked + .toggle-slider:before {
   justify-content: center;
   line-height: 1;
   padding: 0;
-  margin-left: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .manual-remove-btn:hover:not(:disabled) {
